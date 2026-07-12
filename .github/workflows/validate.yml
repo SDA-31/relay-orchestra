@@ -48,7 +48,7 @@ jobs:
         run: |
           $package = Join-Path $env:RUNNER_TEMP "package\relay-orchestra-test"
           $archive = Join-Path $env:RUNNER_TEMP "relay-orchestra-test.zip"
-          $home = Join-Path $env:RUNNER_TEMP "remote-home"
+          $testHome = Join-Path $env:RUNNER_TEMP "remote-home"
           New-Item -ItemType Directory -Path (Join-Path $package "scripts") -Force | Out-Null
           New-Item -ItemType Directory -Path (Join-Path $package "skills") -Force | Out-Null
           Copy-Item .\scripts\install.py (Join-Path $package "scripts\install.py")
@@ -56,4 +56,4 @@ jobs:
           Compress-Archive -Path $package -DestinationPath $archive
           $env:RELAY_ORCHESTRA_TEST_ARCHIVE = $archive
           $entryPoint = Get-Content .\install.ps1 -Raw
-          & ([scriptblock]::Create($entryPoint)) -InstallerArgs @("--target", "agents", "--home", $home, "--dry-run", "--json")
+          & ([scriptblock]::Create($entryPoint)) -InstallerArgs @("--target", "agents", "--home", $testHome, "--dry-run", "--json")
