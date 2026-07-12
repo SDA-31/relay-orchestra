@@ -56,6 +56,8 @@ def validate() -> None:
         "Live Run Ledger",
         "Milestone updates do not deactivate it",
         "Do not switch to worktree mode silently",
+        "stable functional role",
+        "completed-but-open handle",
         "STATUS: DONE | BLOCKED | NEEDS_CONTEXT",
         "COMMANDS_AND_SIDE_EFFECTS",
         "deactivate Relay Orchestra",

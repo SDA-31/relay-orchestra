@@ -45,11 +45,11 @@ Reject dependency cycles. Do not create a graph for a small cohesive task.
 
 ## Worktree Strategy
 
-Default to the shared tree and announce that changes appear there immediately. Use isolated worktrees only after explicit user request or approval.
+Default to the shared tree and announce that changes appear there immediately. Use isolated worktrees only after explicit user request or approval. Explain that Git objects are shared but checked-out files, local dependencies, and in-tree build outputs may consume additional disk space.
 
 Recommend worktrees when paths may overlap, the main tree is dirty, independent builds are required, attribution is unreliable, or writers may run for a long time. Use one separate checkout per concurrent writer. A branch alone is not file isolation.
 
-For shared writers, audit actual changes after each result. For isolated writers, compare paths before integration, integrate one stream at a time, resolve conflicts from confirmed intent, and retain worktrees until integration or explicit abandonment.
+For shared writers, audit actual changes after each result. For isolated writers, compare paths before integration, integrate one stream at a time, resolve conflicts from confirmed intent, and retain worktrees until integration or explicit abandonment. Remove task-created worktrees after verified integration when cleanup is authorized.
 
 ## Synthesis
 

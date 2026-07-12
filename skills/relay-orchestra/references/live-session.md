@@ -5,7 +5,7 @@ Use this reference when the user changes requirements while agents are active, w
 ## Event Loop
 
 1. Read the newest user message before processing older worker events.
-2. Assign a requirement revision when intent, priority, ownership, or acceptance changes.
+2. Assign an internal requirement revision when intent, priority, ownership, or acceptance changes; describe the change in plain language to the user.
 3. Compare the delta with every active and queued work item.
 4. Preserve valid work, redirect invalid work, and record intentionally deferred ideas.
 5. Dispatch newly unblocked work up to capacity.
@@ -32,7 +32,11 @@ Use queued input when the current task remains valid and the delta can be applie
 
 Reuse an agent when its local context materially reduces rediscovery and its ownership remains compatible. Spawn a new agent when the work is independent, needs a different specialty, or would overload the current agent's scope. Queue when capacity is full. Hold when a dependency or user decision is missing.
 
-Do not keep an idle agent merely to preserve trivial context. Close agents whose useful context has been synthesized and whose follow-up probability is low.
+Assign a stable functional role or task label to each agent. Use that label in user-facing receipts across clients; include a generated nickname only as optional mapping metadata. Track work status separately from handle state so `completed`, `open`, `closed`, `visible`, and `archived` are never treated as synonyms.
+
+Keep an agent open while it is running, while its result or writes still need capture or audit, or while an immediate compatible follow-up is likely and capacity is available. Once its useful context is synthesized and owned writes are audited, close it even if the session remains `ACTIVE`. Do not wait for confirmation of the entire parent task merely to preserve a completed handle. When the client supports resume, retain the handle ID and resume it for a later context-dependent follow-up; otherwise send compact retained context to a new agent.
+
+Treat closing as a runtime-capacity transition, not as hiding, archiving, deleting, or removing the handle from `EXACT` accounting. A completed-but-open handle may still consume capacity; a closed handle may remain visible as history. For large workloads, dispatch bounded waves and close accounted agents before opening the next wave. Do not depend on indefinite resume availability for correctness.
 
 ## Handle Results
 

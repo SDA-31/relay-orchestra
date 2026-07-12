@@ -15,3 +15,31 @@ jobs:
       - run: python3 scripts/validate.py
       - run: python3 -m unittest discover -s tests
       - run: sh -n install.sh
+
+  python-37:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.7"
+      - run: python scripts/validate.py
+      - run: python -m unittest discover -s tests
+
+  macos-installer:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sh install.sh --target agents --home "$RUNNER_TEMP/relay-home" --dry-run --json
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: .\install.ps1 --target agents --home (Join-Path $env:RUNNER_TEMP "relay-home") --dry-run --json

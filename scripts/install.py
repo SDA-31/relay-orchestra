@@ -12,10 +12,22 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 
 SKILL_NAME = "relay-orchestra"
 CLIENTS = ("agents", "codex", "claude", "gemini", "cursor", "opencode", "copilot")
+NONINTERACTIVE_ERROR = "interactive input is unavailable; pass --target <environment>"
+INTERACTIVE_TARGETS = (
+    ("codex", "Codex"),
+    ("claude", "Claude Code"),
+    ("gemini", "Gemini CLI"),
+    ("cursor", "Cursor"),
+    ("opencode", "OpenCode"),
+    ("copilot", "GitHub Copilot"),
+    ("agents", "Universal Agent Skills"),
+    ("all", "All supported environments"),
+)
 
 
 @dataclass(frozen=True)
@@ -33,7 +45,7 @@ def parser() -> argparse.ArgumentParser:
         "--target",
         action="append",
         choices=(*CLIENTS, "all"),
-        help="User-level target; repeat for several clients. Defaults to the open Agent Skills path.",
+        help="User-level target; repeat for several clients. With no arguments, choose interactively.",
     )
     result.add_argument("--home", type=Path, help="Override the user home used for target paths.")
     result.add_argument("--codex-home", type=Path, help="Override CODEX_HOME for the Codex target.")
@@ -50,6 +62,46 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--dry-run", action="store_true", help="Show destinations without writing files.")
     result.add_argument("--json", action="store_true", help="Emit machine-readable output.")
     return result
+
+
+def choose_target(input_stream: TextIO, output_stream: TextIO) -> str:
+    print("Choose where to install Relay Orchestra:", file=output_stream)
+    for index, (_, label) in enumerate(INTERACTIVE_TARGETS, start=1):
+        print(f"  {index}) {label}", file=output_stream)
+    output_stream.flush()
+
+    while True:
+        print(f"Selection [1-{len(INTERACTIVE_TARGETS)}]: ", end="", file=output_stream, flush=True)
+        response = input_stream.readline()
+        if response == "":
+            raise ValueError(NONINTERACTIVE_ERROR)
+        response = response.strip()
+        if response.isascii() and response.isdigit():
+            selection = int(response)
+            if 1 <= selection <= len(INTERACTIVE_TARGETS):
+                return INTERACTIVE_TARGETS[selection - 1][0]
+        print("Enter one of the numbers shown above.", file=output_stream, flush=True)
+
+
+def prompt_for_target() -> str:
+    if sys.stdin.isatty():
+        return choose_target(sys.stdin, sys.stdout)
+
+    if os.name == "nt":
+        raise ValueError(NONINTERACTIVE_ERROR)
+
+    try:
+        with open("/dev/tty", "r+", encoding="utf-8", buffering=1) as terminal:
+            return choose_target(terminal, terminal)
+    except OSError as error:
+        raise ValueError(NONINTERACTIVE_ERROR) from error
+
+
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
+    values = list(sys.argv[1:] if argv is None else argv)
+    if not values:
+        values = ["--target", prompt_for_target()]
+    return parser().parse_args(values)
 
 
 def default_source() -> Path:
@@ -118,6 +170,24 @@ def remove_path(path: Path) -> None:
         shutil.rmtree(path)
 
 
+def is_unchanged_link(source: Path, path: Path, args: argparse.Namespace) -> bool:
+    return args.link and path.is_symlink() and path.resolve() == source
+
+
+def preflight_destinations(
+    source: Path, selected: list[Destination], args: argparse.Namespace
+) -> None:
+    if args.dry_run or args.force:
+        return
+
+    for destination in selected:
+        path = destination.path
+        if is_unchanged_link(source, path, args):
+            continue
+        if path.exists() or path.is_symlink():
+            raise ValueError(f"destination already exists: {path} (use --force to replace it)")
+
+
 def install_one(source: Path, destination: Destination, args: argparse.Namespace) -> dict[str, str]:
     path = destination.path
     mode = "link" if args.link else "copy"
@@ -125,7 +195,7 @@ def install_one(source: Path, destination: Destination, args: argparse.Namespace
         return {"target": destination.target, "path": str(path), "status": "dry-run", "mode": mode}
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink() and args.link and path.resolve() == source:
+    if is_unchanged_link(source, path, args):
         return {"target": destination.target, "path": str(path), "status": "unchanged", "mode": mode}
     if (path.exists() or path.is_symlink()) and not args.force:
         raise ValueError(f"destination already exists: {path} (use --force to replace it)")
@@ -165,15 +235,16 @@ def emit(results: list[dict[str, str]], args: argparse.Namespace) -> None:
 
 
 def main() -> int:
-    args = parser().parse_args()
     try:
+        args = parse_arguments()
         source = validate_source(args.source or default_source())
         selected = destinations(args)
         if not selected:
             raise ValueError("no installation destination selected")
+        preflight_destinations(source, selected, args)
         results = [install_one(source, item, args) for item in selected]
     except (OSError, ValueError) as error:
-        if args.json:
+        if "args" in locals() and args.json:
             print(json.dumps({"skill": SKILL_NAME, "error": str(error)}, indent=2), file=sys.stderr)
         else:
             print(f"Installation failed: {error}", file=sys.stderr)

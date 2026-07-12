@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -9,9 +10,14 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
-
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from scripts import install as installer_module
+
+
 INSTALLER = ROOT / "scripts" / "install.py"
 SHELL_INSTALLER = ROOT / "install.sh"
 
@@ -82,6 +88,174 @@ class InstallerTests(unittest.TestCase):
             payload = json.loads(result.stdout)
             self.assertEqual(len(payload["destinations"]), 7)
             self.assertTrue((home / ".config" / "opencode" / "skills" / "relay-orchestra" / "SKILL.md").is_file())
+
+    def test_explicit_targets_preflight_later_existing_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            later = home / ".gemini" / "skills" / "relay-orchestra"
+            later.mkdir(parents=True)
+            marker = later / "existing.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            result = self.run_installer(
+                "--home",
+                str(home),
+                "--target",
+                "codex",
+                "--target",
+                "gemini",
+                expected=1,
+            )
+
+            self.assertIn(f"destination already exists: {later.resolve()}", result.stderr)
+            self.assertFalse((home / ".codex").exists())
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+
+    def test_all_targets_preflight_later_existing_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            later = home / ".config" / "opencode" / "skills" / "relay-orchestra"
+            later.mkdir(parents=True)
+            marker = later / "existing.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            result = self.run_installer(
+                "--home",
+                str(home),
+                "--target",
+                "all",
+                expected=1,
+            )
+
+            self.assertIn(f"destination already exists: {later.resolve()}", result.stderr)
+            for earlier_root in (".agents", ".codex", ".claude", ".gemini", ".cursor"):
+                self.assertFalse((home / earlier_root).exists())
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+
+    def test_interactive_menu_selects_environment(self) -> None:
+        expected_targets = (
+            ("codex", "Codex"),
+            ("claude", "Claude Code"),
+            ("gemini", "Gemini CLI"),
+            ("cursor", "Cursor"),
+            ("opencode", "OpenCode"),
+            ("copilot", "GitHub Copilot"),
+            ("agents", "Universal Agent Skills"),
+            ("all", "All supported environments"),
+        )
+        self.assertEqual(installer_module.INTERACTIVE_TARGETS, expected_targets)
+
+        output = io.StringIO()
+        target = installer_module.choose_target(io.StringIO("2\n"), output)
+        self.assertEqual(target, "claude")
+        menu = output.getvalue()
+        for index, (_, label) in enumerate(expected_targets, start=1):
+            self.assertIn(f"  {index}) {label}", menu)
+
+    def test_interactive_menu_retries_invalid_input(self) -> None:
+        output = io.StringIO()
+        target = installer_module.choose_target(io.StringIO("0\nunknown\n\u00b2\n9\n8\n"), output)
+        self.assertEqual(target, "all")
+        self.assertEqual(output.getvalue().count("Enter one of the numbers shown above."), 4)
+
+    def test_interactive_menu_fails_on_end_of_input(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"pass --target <environment>"):
+            installer_module.choose_target(io.StringIO(""), io.StringIO())
+
+    def test_explicit_target_skips_interactive_prompt(self) -> None:
+        with mock.patch.object(
+            installer_module,
+            "prompt_for_target",
+            side_effect=AssertionError("explicit target prompted for input"),
+        ):
+            args = installer_module.parse_arguments(["--target", "gemini", "--dry-run"])
+        self.assertEqual(args.target, ["gemini"])
+
+    def test_no_arguments_use_interactive_selection(self) -> None:
+        with mock.patch.object(installer_module, "prompt_for_target", return_value="cursor") as prompt:
+            args = installer_module.parse_arguments([])
+        prompt.assert_called_once_with()
+        self.assertEqual(args.target, ["cursor"])
+
+    @unittest.skipIf(os.name == "nt", "POSIX controlling-terminal behavior")
+    def test_posix_prompt_uses_standard_streams_when_interactive(self) -> None:
+        class TtyInput(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        input_stream = TtyInput("3\n")
+        output_stream = io.StringIO()
+        with mock.patch.object(installer_module.sys, "stdin", input_stream):
+            with mock.patch.object(installer_module.sys, "stdout", output_stream):
+                with mock.patch("builtins.open", side_effect=AssertionError("/dev/tty should not be opened")):
+                    target = installer_module.prompt_for_target()
+        self.assertEqual(target, "gemini")
+        self.assertIn("Gemini CLI", output_stream.getvalue())
+
+    @unittest.skipIf(os.name == "nt", "POSIX controlling-terminal behavior")
+    def test_posix_prompt_uses_controlling_terminal(self) -> None:
+        class DuplexTerminal:
+            def __init__(self) -> None:
+                self.input = io.StringIO("1\n")
+                self.output = io.StringIO()
+
+            def __enter__(self) -> DuplexTerminal:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                pass
+
+            def write(self, value: str) -> int:
+                return self.output.write(value)
+
+            def flush(self) -> None:
+                pass
+
+            def readline(self) -> str:
+                return self.input.readline()
+
+        terminal = DuplexTerminal()
+        with mock.patch.object(installer_module.sys.stdin, "isatty", return_value=False):
+            with mock.patch("builtins.open", return_value=terminal) as open_terminal:
+                target = installer_module.prompt_for_target()
+        self.assertEqual(target, "codex")
+        open_terminal.assert_called_once_with("/dev/tty", "r+", encoding="utf-8", buffering=1)
+
+    def test_windows_prompt_uses_python_menu(self) -> None:
+        class TtyInput(io.StringIO):
+            def isatty(self) -> bool:
+                return True
+
+        input_stream = TtyInput("6\n")
+        output_stream = io.StringIO()
+        with mock.patch.object(installer_module.os, "name", "nt"):
+            with mock.patch.object(installer_module.sys, "stdin", input_stream):
+                with mock.patch.object(installer_module.sys, "stdout", output_stream):
+                    target = installer_module.prompt_for_target()
+        self.assertEqual(target, "copilot")
+        self.assertIn("GitHub Copilot", output_stream.getvalue())
+
+    def test_windows_noninteractive_input_fails_clearly(self) -> None:
+        with mock.patch.object(installer_module.os, "name", "nt"):
+            with mock.patch.object(installer_module.sys, "stdin", io.StringIO("")):
+                with self.assertRaisesRegex(ValueError, r"pass --target <environment>"):
+                    installer_module.prompt_for_target()
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX session handling")
+    def test_no_argument_noninteractive_process_fails_clearly(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(INSTALLER)],
+            cwd="/",
+            stdin=subprocess.DEVNULL,
+            text=True,
+            capture_output=True,
+            check=False,
+            start_new_session=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 1, result.stderr or result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("pass --target <environment>", result.stderr)
 
 
 class ShellInstallerTests(unittest.TestCase):
@@ -255,7 +429,11 @@ class ReadmeInstallerContractTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         command = "curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash"
         self.assertIn(command, readme)
-        self.assertIn(f"{command} -s -- --target codex", readme)
+        self.assertIn("interactive menu", readme.lower())
+        self.assertIn("`--target codex`", readme)
+        self.assertIn("`bash -s -- --target codex`", readme)
+        self.assertIn("`$relay-orchestra`", readme)
+        self.assertNotRegex(readme, r"ACCEPTED R\d+")
 
 
 if __name__ == "__main__":

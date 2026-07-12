@@ -1,6 +1,6 @@
 ---
 name: relay-orchestra
-description: EXPLICIT-ONLY, run-scoped coordination of an interactive multi-turn session with any user-requested number of native subagents. Use when the user explicitly invokes Relay Orchestra to delegate research, review, or implementation while continuing to add, revise, reprioritize, or cancel work; keep the coordinator responsive, reuse or redirect workers, schedule new agents and waves, verify results, and deactivate only when the session is finalized or stopped.
+description: EXPLICIT-ONLY, run-scoped coordination of parallel native subagents across a multi-turn session for faster research, review, and implementation with user control and capability-aware fallbacks.
 ---
 
 # Relay Orchestra
@@ -74,7 +74,7 @@ HELD: work intentionally deferred and its unblock condition
 AGENTS: active / queued / requested
 ~~~
 
-Keep receipts short. Omit empty fields.
+Keep receipts short. Omit empty fields. Identify agents by functional role or task label, such as `Lifecycle research` or `README editor`; append a client-generated nickname only when it helps the user map the role to a visible thread.
 
 ## Live Run Ledger
 
@@ -83,16 +83,28 @@ Maintain a compact ledger in the coordinating context; do not create a file unle
 Track:
 
 - session state: ACTIVE, STOPPING, or OFF
-- current objective and latest requirement revision
+- current objective and latest internal requirement revision
 - continuity support for skill instructions, ledger, and agent handles; fallback token when needed
 - count mode, exact ceiling when set, and distinct successfully created handles
-- agent ID, role, status, context value, ownership, and isolation
+- agent ID when available, stable functional role, optional client nickname, work status, handle state, context value, ownership, and isolation
 - active, queued, held, superseded, failed, and completed work
 - confirmed decisions and evidence
 - shared-tree stability and changed-path ownership
 - next unblock event or action
 
-Number meaningful user changes `R1`, `R2`, and so on. Send workers the relevant delta plus the current authoritative requirement, not the entire conversation. Read [live-session.md](references/live-session.md) for event routing, resource allocation, and redirection rules.
+Track meaningful user changes with an internal monotonic revision such as `rev-1`. Never use bare `R1`, `R2`, and similar labels in user-facing receipts unless the user chose that convention; they are easily confused with agent roles or workstreams. Lead with a plain-language description of what changed. Send workers the relevant delta plus the current authoritative requirement, not the entire conversation. Read [live-session.md](references/live-session.md) for event routing, resource allocation, and redirection rules.
+
+## Portable Agent Identity And Status
+
+Agent presentation differs by client: a client may expose separate chats with generated names, show a subagent panel, or keep workers invisible in the background. Use a client-neutral ledger instead of depending on any one presentation.
+
+- Assign every worker a stable functional role or task label before dispatch. Use that label in receipts and handoffs.
+- Treat a client-generated nickname as optional display metadata, never as the worker's responsibility or status.
+- Keep work status separate from handle lifecycle. Normalize work as `queued`, `running`, `completed`, `errored`, or `interrupted`; normalize lifecycle as `open`, `closing`, `closed`, or `unknown` when the client exposes it.
+- Do not infer active runtime, capacity use, closure, archival, or deletion from whether a worker remains visible in the client UI.
+- When lifecycle controls are absent, report the closest confirmed state without pretending that a hidden or completed worker is closed.
+
+Closing is resource cleanup, not deletion. A completed-but-open handle may still consume capacity, while a closed handle may remain visible as history. Keep an agent open while it is running, while its result or writes still need capture or audit, or while an immediate context-dependent follow-up is likely and capacity is available. Once its useful result is synthesized, owned writes are audited, and no immediate correction is expected, close it even if the Relay session remains `ACTIVE`. When supported, resume the same closed handle for a later related follow-up; otherwise dispatch a new worker with the compact retained context. Never rely on indefinite resumption for correctness.
 
 ## Process Every Event
 
@@ -121,6 +133,8 @@ Do not forward raw transcripts. Tell each affected agent what changed, what rema
 ## Agent Count And Capacity
 
 Accept any positive requested count. The skill imposes no fixed maximum and must not hard-code common counts such as three or five.
+
+Before the first multi-agent dispatch in a session, disclose once that each agent performs separate model work and parallel fan-out can consume tokens, credits, quota, or billed usage much faster than a single-agent run. Recommend fewer agents when roles overlap. Do not invent a fixed multiplier or price. Do not repeat the warning after the user explicitly acknowledges it unless the requested agent count increases.
 
 - Honor one agent as a valid delegation run.
 - Honor large requests such as fifteen agents when the client can create them.
@@ -158,11 +172,11 @@ Default to shared mode. At session start, unless worktrees were already approved
 
 Use the shared tree for read-only agents and clearly disjoint writers with reliable attribution. Never assign overlapping paths to concurrent shared-tree writers.
 
-Do not switch to worktree mode silently. Recommend serialization, narrower ownership, or worktrees when the tree is dirty, paths overlap, attribution is unreliable, independent builds are needed, or writers are long-running. Use one isolated checkout per concurrent writer only after explicit approval. A branch in one checkout is not isolation.
+Do not switch to worktree mode silently. Recommend serialization, narrower ownership, or worktrees when the tree is dirty, paths overlap, attribution is unreliable, independent builds are needed, or writers are long-running. Use one isolated checkout per concurrent writer only after explicit approval. Before creation, disclose that a worktree shares Git history but duplicates checked-out files and may duplicate local dependencies or build outputs; account for repository size and available disk space. A branch in one checkout is not isolation.
 
 When a new instruction changes ownership, interrupt or finish the current owner before reassigning its paths. Audit live shared-tree changes first. Shared changes are already applied; isolated changes are integrated one stream at a time by the coordinator.
 
-Do not create, commit, merge, rebase, cherry-pick, delete, or clean worktrees beyond user authorization and repository rules.
+Do not create, commit, merge, rebase, cherry-pick, delete, or clean worktrees beyond user authorization and repository rules. After verified integration, remove task-created worktrees when authorized so temporary checkouts do not accumulate.
 
 ## Dispatch Packet
 

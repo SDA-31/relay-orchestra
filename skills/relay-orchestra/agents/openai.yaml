@@ -1,6 +1,6 @@
 interface:
   display_name: "Relay Orchestra"
-  short_description: "Run a responsive multi-agent control session"
-  default_prompt: "Start $relay-orchestra for this objective, keep accepting my updates while agents work, and finalize only when I ask or the latest objective is complete."
+  short_description: "Move work faster with parallel agents you control"
+  default_prompt: "Start $relay-orchestra for this objective with parallel native agents where supported, preserve continued steering while they work, disclose capability limits and fallbacks, and finalize only when I ask or the latest objective is complete."
 policy:
   allow_implicit_invocation: false
