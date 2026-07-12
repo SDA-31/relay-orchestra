@@ -1,0 +1,53 @@
+[
+  {
+    "id": "native_dispatch_yield_second_turn",
+    "capabilities": {
+      "skill_instructions_persist": true,
+      "ledger_persists": true,
+      "agent_handles_persist": true
+    },
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Explicitly activate with exactly two agents.", "expect": ["ACTIVE", "EXACT_2"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch shared read-only workers A and B, send a compact receipt, and yield.", "expect": ["dispatch", "shared_announcement", "responsive_yield", "native_continuity"]},
+      {"turn": 2, "event": "delivery_batch", "detail": "A worker result and the second user turn arrive together.", "inputs": [{"kind": "worker_result", "source": "A", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Queue a compatible change for B and hold accessibility review until A completes."}], "expect": ["user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2"]},
+      {"turn": 2, "event": "coordinator", "detail": "Route the new requirement, then process A's result and yield again.", "expect": ["revision_increment", "same_turn_receipt", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "stop_during_shared_write_and_late_result",
+    "capabilities": {
+      "skill_instructions_persist": true,
+      "ledger_persists": true,
+      "agent_handles_persist": true
+    },
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "A shared-tree writer is active.", "expect": ["shared_writer_live"]},
+      {"turn": 2, "event": "user", "detail": "Stop Relay Orchestra now.", "expect": ["stop_requested"]},
+      {"turn": 2, "event": "coordinator", "detail": "Enter STOPPING, freeze dispatch, attempt interruption, and find the writer uncontrollable.", "expect": ["ACTIVE_to_STOPPING", "tree_unstable", "repository_operations_prohibited", "remain_STOPPING"]},
+      {"turn": 3, "event": "user", "detail": "I explicitly accept hand-back of the unstable tree.", "expect": ["accept_unstable_handback"]},
+      {"turn": 3, "event": "coordinator", "detail": "Report the live writer and hand back without a final-audit claim.", "expect": ["STOPPING_to_OFF", "unstable_handoff"]},
+      {"turn": 4, "event": "worker_result", "detail": "The late worker reports additional writes.", "expect": ["report_late_write", "do_not_reopen", "new_activation_required"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "persistence_fallback_rehydration",
+    "capabilities": {
+      "skill_instructions_persist": false,
+      "ledger_persists": false,
+      "agent_handles_persist": false
+    },
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Explicitly activate a multi-turn research session.", "expect": ["ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Disclose missing persistence, run a bounded wave, settle all handles, and emit a compact non-secret session token.", "expect": ["persistence_disclosure", "bounded_wave", "no_live_handle_at_yield", "session_token"]},
+      {"turn": 1, "event": "yield", "detail": "Return control after the bounded wave.", "expect": ["responsive_yield"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly invoke `$relay-orchestra resume <token>:` before the related instruction.", "expect": ["explicit_skill_resume", "token_prefix"]},
+      {"turn": 2, "event": "coordinator", "detail": "Reload instructions, rehydrate the compact ledger, create only newly controllable workers, and issue the next explicit resume token.", "expect": ["rehydrate", "no_claim_of_handle_recovery", "session_token", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  }
+]
