@@ -20,6 +20,7 @@ from scripts import install as installer_module
 
 INSTALLER = ROOT / "scripts" / "install.py"
 SHELL_INSTALLER = ROOT / "install.sh"
+POWERSHELL_INSTALLER = ROOT / "install.ps1"
 
 
 class InstallerTests(unittest.TestCase):
@@ -428,12 +429,22 @@ class ReadmeInstallerContractTests(unittest.TestCase):
     def test_remote_install_commands_are_documented(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         command = "curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash"
+        windows_command = "irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex"
         self.assertIn(command, readme)
+        self.assertIn(windows_command, readme)
+        self.assertNotIn("git clone --depth 1", readme)
         self.assertIn("interactive menu", readme.lower())
         self.assertIn("`--target codex`", readme)
         self.assertIn("`bash -s -- --target codex`", readme)
         self.assertIn("`$relay-orchestra`", readme)
         self.assertNotRegex(readme, r"ACCEPTED R\d+")
+
+    def test_powershell_remote_bootstrap_contract(self) -> None:
+        script = POWERSHELL_INSTALLER.read_text(encoding="utf-8")
+        self.assertIn('Invoke-WebRequest -UseBasicParsing -Uri $archiveUrl -OutFile $archive', script)
+        self.assertIn('Invoke-RemoteInstall -Python $python -Arguments $InstallerArgs', script)
+        self.assertIn('Stop-Install "--link requires a local checkout"', script)
+        self.assertIn("RELAY_ORCHESTRA_TEST_ARCHIVE", script)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ The [README](README.md) contains the recommended installation path. This guide c
 
 - Python 3.7 or newer.
 - macOS or Linux: a POSIX shell, `curl`, and standard temporary-file tools.
-- Windows: PowerShell and Git.
+- Windows: PowerShell.
 
 After installation, start a new task or chat if the client caches its skill catalog.
 
@@ -48,12 +48,10 @@ An existing installation is never overwritten implicitly. Repeat the original in
 curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash -s -- --target <environment> --force
 ```
 
-For Windows, update the checkout first and then reinstall the same target:
+For Windows, run the remote installer as a script block so arguments are forwarded explicitly:
 
 ```powershell
-Set-Location relay-orchestra
-git pull --ff-only
-.\install.ps1 --target <environment> --force
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1))) -InstallerArgs @("--target", "<environment>", "--force")
 ```
 
 The installer uses a staged replacement beside the current destination, with rollback to the previous installation on failure.
@@ -70,6 +68,14 @@ sh relay-orchestra-install.sh
 
 The reviewed entry point still downloads the repository archive that contains the skill and shared installer. Clone the repository when you want to inspect the complete payload before installation.
 
+On Windows, inspect the PowerShell entry point before executing it:
+
+```powershell
+irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 -OutFile relay-orchestra-install.ps1
+Get-Content .\relay-orchestra-install.ps1
+.\relay-orchestra-install.ps1
+```
+
 ## Pinned Installation
 
 For a reproducible remote installation, use the same verified full commit SHA for both the entry point and payload:
@@ -81,6 +87,18 @@ RELAY_ORCHESTRA_REF=<full-commit-sha> sh relay-orchestra-install.sh
 ```
 
 Do not review one revision and install another. A branch or tag can move; a full commit SHA cannot.
+
+The equivalent pinned Windows flow is:
+
+```powershell
+$env:RELAY_ORCHESTRA_REF = "<full-commit-sha>"
+try {
+    $entryPoint = irm "https://raw.githubusercontent.com/SDA-31/relay-orchestra/$env:RELAY_ORCHESTRA_REF/install.ps1"
+    & ([scriptblock]::Create($entryPoint))
+} finally {
+    Remove-Item Env:RELAY_ORCHESTRA_REF
+}
+```
 
 ## Local Checkout and Linking
 
@@ -99,7 +117,7 @@ Without link mode, a local checkout copies the skill just like the remote instal
 ## Installer Architecture
 
 - `install.sh` is the macOS/Linux entry point. From a local checkout it calls the shared Python installer directly. When fetched remotely, it downloads a temporary repository archive, validates and extracts it, calls the shared installer, and removes the temporary files.
-- `install.ps1` is the Windows entry point. It locates Python 3 and forwards arguments to the shared installer.
+- `install.ps1` is the Windows entry point. From a local checkout it forwards arguments to the shared Python installer. When fetched remotely, it downloads and validates a temporary repository archive first.
 - `scripts/install.py` resolves destinations, validates the source skill, and performs copy, link, dry-run, replacement, and output handling.
 
 Users should invoke an operating-system entry point rather than call the Python implementation directly.

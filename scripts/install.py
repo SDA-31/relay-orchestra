@@ -58,7 +58,11 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--source", type=Path, help="Override the source skill directory.")
     result.add_argument("--link", action="store_true", help="Create symlinks instead of copying files.")
-    result.add_argument("--force", action="store_true", help="Replace an existing destination atomically.")
+    result.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing destination using staged replacement with rollback on failure.",
+    )
     result.add_argument("--dry-run", action="store_true", help="Show destinations without writing files.")
     result.add_argument("--json", action="store_true", help="Emit machine-readable output.")
     return result

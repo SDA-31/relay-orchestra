@@ -12,7 +12,7 @@ It stays active only for the current task. It does not silently apply itself to 
 
 ## Quick Start
 
-Relay Orchestra requires Python 3.7 or newer. Windows installation also requires Git.
+Relay Orchestra requires Python 3.7 or newer.
 
 With no arguments, the installer opens an interactive menu for Codex, Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot, universal Agent Skills, or all supported environments. It prints the exact destination after installation. Start a new task or chat afterward if your client caches its skill catalog.
 
@@ -22,15 +22,13 @@ With no arguments, the installer opens an interactive menu for Codex, Claude Cod
 curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash
 ```
 
-This executes code from the mutable `main` branch. Use it only if you trust this repository and GitHub's delivery path; see [Installation](INSTALL.md) for inspect-first and pinned alternatives.
-
 ### Windows PowerShell
 
 ```powershell
-git clone --depth 1 https://github.com/SDA-31/relay-orchestra.git
-Set-Location relay-orchestra
-.\install.ps1
+irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex
 ```
+
+Both commands execute code from the mutable `main` branch. Use them only if you trust this repository and GitHub's delivery path; see [Installation](INSTALL.md) for inspect-first and pinned alternatives.
 
 ### Invoke It
 
@@ -129,7 +127,7 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 
 ## Installer Options
 
-All options use the same installer entry point shown above. For remote macOS/Linux installation, pass them after `bash -s --` (for example, `bash -s -- --target codex`); on Windows, append them to `.\install.ps1`. See [Installation](INSTALL.md) for exact paths and detailed workflows.
+All options use the same installer entry point shown above. For remote macOS/Linux installation, pass them after `bash -s --` (for example, `bash -s -- --target codex`). PowerShell flags use the script-block form documented in [Installation](INSTALL.md). Local Windows checkouts can append them to `.\install.ps1` directly.
 
 | Flag | Purpose |
 | --- | --- |
