@@ -426,18 +426,34 @@ class ShellInstallerTests(unittest.TestCase):
 
 
 class ReadmeInstallerContractTests(unittest.TestCase):
-    def test_remote_install_commands_are_documented(self) -> None:
+    def test_primary_skills_cli_install_is_documented(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        command = "curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash"
-        windows_command = "irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex"
-        self.assertIn(command, readme)
-        self.assertIn(windows_command, readme)
+        self.assertIn("npx skills add SDA-31/relay-orchestra", readme)
+        self.assertEqual(readme.count("npx skills add SDA-31/relay-orchestra"), 1)
+        self.assertIn("https://skills.sh/b/SDA-31/relay-orchestra", readme)
+        self.assertIn("https://skills.sh/SDA-31/relay-orchestra", readme)
+        self.assertIn("## When It Helps", readme)
+        self.assertIn("market or competitor research", readme)
+        self.assertIn("multi-module implementation", readme)
+        self.assertIn("flowchart TD", readme)
+        self.assertNotIn("flowchart LR", readme)
+        self.assertNotIn("Python 3.7", readme)
+        self.assertNotIn("curl -fsSL", readme)
+        self.assertNotIn("irm https://", readme)
         self.assertNotIn("git clone --depth 1", readme)
-        self.assertIn("interactive menu", readme.lower())
-        self.assertIn("`--target codex`", readme)
-        self.assertIn("`bash -s -- --target codex`", readme)
         self.assertIn("`$relay-orchestra`", readme)
         self.assertNotRegex(readme, r"ACCEPTED R\d+")
+
+    def test_standalone_install_commands_are_documented(self) -> None:
+        installation = (ROOT / "INSTALL.md").read_text(encoding="utf-8")
+        command = "curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash"
+        windows_command = "irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex"
+        self.assertIn(command, installation)
+        self.assertIn(windows_command, installation)
+        self.assertIn("npx skills update relay-orchestra", installation)
+        self.assertIn("interactive menu", installation.lower())
+        self.assertIn("`--target codex`", installation)
+        self.assertIn("`bash -s -- --target codex`", installation)
 
     def test_powershell_remote_bootstrap_contract(self) -> None:
         script = POWERSHELL_INSTALLER.read_text(encoding="utf-8")

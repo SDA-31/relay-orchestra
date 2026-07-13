@@ -1,34 +1,40 @@
-# Relay Orchestra
+<h1 align="center">Relay Orchestra</h1>
 
-Move work faster with parallel agents while keeping control of the conversation.
+<p align="center"><strong>Coordinate parallel agents across large, cross-cutting tasks while you keep steering.</strong></p>
 
-[![Agent Skills](https://img.shields.io/badge/Agent%20Skills-compatible-2563EB)](https://agentskills.io/specification)
-![Distribution](https://img.shields.io/badge/distribution-install%20scripts-0F766E)
-[![License: MIT](https://img.shields.io/badge/license-MIT-374151)](LICENSE)
+<p align="center">
+  <a href="https://skills.sh/SDA-31/relay-orchestra"><img src="https://skills.sh/b/SDA-31/relay-orchestra" alt="skills.sh installs"></a>
+  <a href="https://agentskills.io/specification"><img src="https://img.shields.io/badge/Agent%20Skills-compatible-2563EB" alt="Agent Skills compatible"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-374151" alt="MIT license"></a>
+</p>
 
-Relay Orchestra coordinates your client's built-in agents across a live multi-turn session, so parallel research, review, and implementation can move faster while you keep steering. Clients without live parallel support fall back honestly to bounded waves, sequential work, or dispatch-ready briefs.
+<p align="center">
+  <a href="#quick-start">Install</a> ·
+  <a href="#when-it-helps">When it helps</a> ·
+  <a href="#how-a-live-session-works">Live sessions</a> ·
+  <a href="#compatibility-and-limitations">Compatibility</a> ·
+  <a href="#documentation">Docs</a>
+</p>
 
-It stays active only for the current task. It does not silently apply itself to later work.
+---
+
+Relay Orchestra is a run-scoped multi-agent orchestration skill for large, cross-cutting work. It coordinates your client's built-in agents across a live multi-turn session, assigns focused workstreams, and combines them into one verified result while you keep steering.
+
+Use it for market or competitor research, large codebase audits, module or multi-module implementation, migrations, and cross-cutting reviews. Clients without live parallel support fall back honestly to bounded waves, sequential work, or dispatch-ready briefs.
+
+It stays active only for the current task and does not silently apply itself to later work.
 
 ## Quick Start
 
-Relay Orchestra requires Python 3.7 or newer.
-
-With no arguments, the installer opens an interactive menu for Codex, Claude Code, Gemini CLI, Cursor, OpenCode, GitHub Copilot, universal Agent Skills, or all supported environments. It prints the exact destination after installation. Start a new task or chat afterward if your client caches its skill catalog.
-
-### macOS and Linux
+Relay Orchestra has no runtime dependencies. The skills CLI uses Node.js only during installation:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash
+npx skills add SDA-31/relay-orchestra
 ```
 
-### Windows PowerShell
+The CLI detects supported agents and installs to the current project by default; add `-g` for a user-level installation.
 
-```powershell
-irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex
-```
-
-Both commands execute code from the mutable `main` branch. Use them only if you trust this repository and GitHub's delivery path; see [Installation](INSTALL.md) for inspect-first and pinned alternatives.
+[View it on skills.sh](https://skills.sh/SDA-31/relay-orchestra), or see [Installation](INSTALL.md) for standalone scripts, pinned revisions, exact paths, and custom destinations. Start a new task or chat afterward if your client caches its skill catalog.
 
 ### Invoke It
 
@@ -39,7 +45,7 @@ Use the Relay Orchestra skill for this request only. Run three read-only agents
 to review the current changes, then verify and synthesize their findings.
 ```
 
-> **Usage warning:** Each parallel agent performs separate model work. Running several agents can consume tokens or credits much faster than a single-agent run, even when they share one objective. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
+> **Usage warning:** Each parallel agent performs separate model work, so token or credit use can rise quickly. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
 
 On clients with full live support, a successful start returns a short receipt while work continues; other clients disclose their bounded-wave fallback:
 
@@ -48,6 +54,17 @@ NOW: three reviewers active
 QUEUED: verification and synthesis after their reports
 AGENTS: 3 active / 0 queued / 3 requested
 ```
+
+## When It Helps
+
+Use Relay Orchestra when distinct parts of a large task need centralized coordination:
+
+- **Market research:** split competitors, sources, regions, or hypotheses, then synthesize one result.
+- **Large codebases:** divide exploration or audits by subsystem and specialist perspective.
+- **Module development:** separate investigation, implementation, testing, and review across one or several modules.
+- **Migrations and cross-cutting changes:** coordinate discovery, dependencies, staged execution, and final verification.
+
+A single agent is usually a better fit for small, linear changes. Relay Orchestra adds value when work has distinct ownership areas and one coordinator must track dependencies, accept new instructions, and verify the combined result.
 
 ## What It Does
 
@@ -60,17 +77,18 @@ AGENTS: 3 active / 0 queued / 3 requested
 ## How a Live Session Works
 
 ```mermaid
-flowchart LR
-    U["You: start or change the task"] --> C["Relay Orchestra"]
-    C -->|dispatch| A["Native agents"]
-    C -->|prompt receipt| U
-    A -->|results and blockers| C
-    C -->|reuse, redirect, spawn, queue, or hold| A
+flowchart TD
+    U["You: start or revise the task"]
+    U --> C["Relay Orchestra: acknowledge and dispatch"]
+    C --> A["Native agents: work in parallel"]
+    A --> S["Relay Orchestra: synthesize or redirect"]
+    S --> O["You: receive the result or add instructions"]
 ```
 
 You remain the source of truth. New instructions take priority over planned follow-up work and incoming results.
 
-## Realistic Multi-Turn Example
+<details>
+<summary><strong>Realistic multi-turn example</strong></summary>
 
 ```text
 You: Use Relay Orchestra for this request only. Improve the recipe import flow.
@@ -104,6 +122,8 @@ Relay Orchestra: ACCEPTED: animation superseded; copy task sent to the
 context-rich researcher. CSV scope and accessibility review remain unchanged.
 ```
 
+</details>
+
 ## Safety and Working Trees
 
 Relay Orchestra uses the shared working tree by default and says so when a run starts. Concurrent writers must own separate paths; overlapping edits should be narrowed, serialized, or isolated.
@@ -124,23 +144,6 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Worktrees | Never assumed and always require explicit approval. |
 
 See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is a run-scoped coordinator, not an always-on automation framework.
-
-## Installer Options
-
-All options use the same installer entry point shown above. For remote macOS/Linux installation, pass them after `bash -s --` (for example, `bash -s -- --target codex`). PowerShell flags use the script-block form documented in [Installation](INSTALL.md). Local Windows checkouts can append them to `.\install.ps1` directly.
-
-| Flag | Purpose |
-| --- | --- |
-| `--target` | Skip every question and choose a user target directly. Examples: `--target codex`, `--target claude`, `--target gemini`. Repeatable; `all` installs separate copies. |
-| `--project` | Install under a project's `.agents/skills` directory. |
-| `--destination` | Install to an exact skill directory; repeatable. |
-| `--home` | Override the home directory used to resolve targets. |
-| `--codex-home` | Override the Codex home directory. |
-| `--source` | Use another source skill directory. |
-| `--link` | Symlink from a local checkout instead of copying. |
-| `--force` | Replace an existing destination using a staged replacement with rollback on failure. |
-| `--dry-run` | Report destinations without writing. |
-| `--json` | Emit machine-readable output. |
 
 ## Documentation
 

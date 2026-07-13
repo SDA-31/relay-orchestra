@@ -2,17 +2,49 @@
 
 The [README](README.md) contains the recommended installation path. This guide covers exact destinations, updates, reproducible installation, local development, installer behavior, and troubleshooting.
 
-## Requirements
+## Recommended Installation
+
+Relay Orchestra has no runtime dependencies. The skills CLI uses Node.js and npm only during installation:
+
+```sh
+npx skills add SDA-31/relay-orchestra
+```
+
+The CLI discovers the `relay-orchestra` skill, detects supported agents, and installs to the current project by default. Add `-g` for a user-level installation. Update it later with:
+
+```sh
+npx skills update relay-orchestra
+```
+
+See the [skills.sh listing](https://skills.sh/SDA-31/relay-orchestra) for discovery. After installation, start a new task or chat if the client caches its skill catalog.
+
+## Standalone Script Installation
+
+Use the repository installers when Node.js is unavailable or when you need their explicit destination and linking controls.
+
+Requirements:
 
 - Python 3.7 or newer.
 - macOS or Linux: a POSIX shell, `curl`, and standard temporary-file tools.
 - Windows: PowerShell.
 
-After installation, start a new task or chat if the client caches its skill catalog.
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/SDA-31/relay-orchestra/main/install.ps1 | iex
+```
+
+Both commands execute code from the mutable `main` branch. Use them only if you trust this repository and GitHub's delivery path; inspect-first and pinned alternatives are documented below.
 
 ## Interactive Selection
 
-Running either installer without arguments opens a menu with these choices:
+Running either installer without arguments opens an interactive menu with these choices:
 
 1. Codex
 2. Claude Code
@@ -40,7 +72,24 @@ The installer does not infer a client from directories on disk. It installs only
 
 A project installation goes to `<project>/.agents/skills/relay-orchestra`. A custom destination names the final `relay-orchestra` directory itself, not its parent.
 
-## Updating
+## Standalone Installer Options
+
+For remote macOS/Linux installation, pass options after `bash -s --` (for example, `bash -s -- --target codex`). PowerShell options use the script-block form shown in the updating section. Local Windows checkouts can append options to `.\install.ps1` directly.
+
+| Flag | Purpose |
+| --- | --- |
+| `--target` | Skip every question and choose a user target directly. Examples: `--target codex`, `--target claude`, `--target gemini`. Repeatable; `all` installs separate copies. |
+| `--project` | Install under a project's `.agents/skills` directory. |
+| `--destination` | Install to an exact skill directory; repeatable. |
+| `--home` | Override the home directory used to resolve targets. |
+| `--codex-home` | Override the Codex home directory. |
+| `--source` | Use another source skill directory. |
+| `--link` | Symlink from a local checkout instead of copying. |
+| `--force` | Replace an existing destination using a staged replacement with rollback on failure. |
+| `--dry-run` | Report destinations without writing. |
+| `--json` | Emit machine-readable output. |
+
+## Updating Standalone Installations
 
 An existing installation is never overwritten implicitly. Repeat the original installer with the same target and add `--force`:
 
