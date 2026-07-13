@@ -76,7 +76,7 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 
 ## What It Does
 
-- **Keeps the conversation live.** Relay distinguishes queued results from automatic wake and defaults to a disclosed user/manual wake when auto-wake is absent.
+- **Keeps orchestration moving.** Relay distinguishes queued results from automatic wake and continues through dependent waves, integration, verification, and a completion candidate without requiring another user message.
 - **Accepts changes mid-run.** Add, revise, reprioritize, hold, or cancel work while agents are active.
 - **Uses native agents.** Relay Orchestra delegates through the host client instead of launching external agent CLIs.
 - **Schedules to capacity.** Request any positive number of agents; Relay accounts for every slot and uses waves in live sessions when the client has fewer slots.
@@ -151,12 +151,12 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Native subagents | Enables parallel delegation; otherwise Relay Orchestra offers sequential work or dispatch-ready briefs. |
 | Background work across turns | Enables a continuous live session; otherwise work runs in short, disclosed waves. |
 | Result notifications | Delivery is checked separately from whether a notification starts a coordinator turn. |
-| Automatic coordinator wake | Enables autonomous synthesis after yield; otherwise Relay uses a disclosed user/manual wake or one explicit dependency wait. |
+| Automatic coordinator wake | Enables native yield and resumption; otherwise Relay uses native short bounded completion waits and processes newer input between intervals. |
 | Lifecycle controls | Follow-up, interruption, and closure vary by client and version. |
 | Concurrency | The host sets practical limits; Relay Orchestra schedules within them. |
 | Worktrees | Never assumed and always require explicit approval. |
 
-Without auto-wake, a live session blocks on a native wait only after you explicitly opt in to that wait. Relay states the shortest practical bounded timeout first and warns that the coordinator turn stays **In Progress** and may delay new input. The only consent exception is an explicitly chosen one-shot whose response strictly depends on worker results; it may wait at most once with the same warning. Relay never sleeps, busy-polls, loops waits, or reflexively re-waits after a timeout.
+Without auto-wake, a live session automatically uses native completion waits or polling in short bounded intervals while active work remains and a specific completion or status condition can be observed. Between intervals Relay processes newer user input and delivered results, then advances dependent waves, integration, verification, and synthesis. It discloses once that the coordinator remains **In Progress** and a message may wait up to one poll interval. A result, orchestration completion, redirect, stop, one-off pause or yield request, or real blocker ends the current polling cycle. Relay never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition. Explicit one-shot behavior is unchanged, and a request to pause or yield until the user returns is an ordinary one-off instruction, not a mode, option, scope, toggle, or persistent policy.
 
 See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is an explicitly scoped coordinator, not an always-on automation framework.
 

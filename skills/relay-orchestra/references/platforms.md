@@ -23,7 +23,7 @@ The specification defines neither a universal subagent API, a universal invocati
 
 ## Observed Codex Behavior
 
-On 2026-07-13, the Codex app was observed queueing a completed-subagent notification without starting a new coordinator turn; the result became visible when the next user turn began. The app-server protocol also represents notifications separately from turn/start. Treat this as notification delivery without proven auto-wake unless the current runtime demonstrates otherwise. Default to a disclosed user/manual wake in that case; a native blocking wait keeps the coordinator turn `In Progress` and may delay new input, so use one only with the bounded-wait consent required by `SKILL.md`.
+On 2026-07-13, the Codex app was observed queueing a completed-subagent notification without starting a new coordinator turn; the result became visible when the next user turn began. The app-server protocol also represents notifications separately from turn/start. Treat this as notification delivery without proven auto-wake unless the current runtime demonstrates otherwise. In that case, automatically use native completion waits or polling at short bounded intervals while active work remains and a specific completion or status condition can be observed. Disclose once that the coordinator remains `In Progress` and a message may wait up to one poll interval. Between intervals, process newer input and delivered results before advancing dependent waves, integration, verification, and synthesis; never use shell sleep, a single long blind block, or polling without active work or a next condition.
 
 ## Invocation Scope
 

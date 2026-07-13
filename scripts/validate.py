@@ -48,15 +48,13 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
         "default_live_scope",
         "session_active",
         "responsive_session",
-        "responsive_yield",
         "yield_main_turn",
+        "native_completion_polling",
+        "short_bounded_poll_interval",
+        "repeat_bounded_poll",
         "remain_ACTIVE",
         "completion_candidate",
-        "completion_candidate_required",
         "later_close_confirmation_required",
-        "blocking_wait_opt_in_required",
-        "explicit_blocking_wait_opt_in",
-        "single_native_wait",
         "pending_close_confirmation",
         "ask_close",
         "close_question_ends_turn",
@@ -148,16 +146,17 @@ def validate() -> None:
         "result delivery or notification",
         "notification-triggered automatic coordinator wake",
         "Notification presence alone does not prove wake support",
-        "next user message or manual wake",
-        "do not treat that request alone as permission to block",
-        "explicitly opts in to that blocking wait",
-        "one native wait",
-        "shortest practical bounded timeout",
-        "main turn stays `In Progress`",
-        "may delay handling new input",
-        "Never use shell sleep, busy-poll, chained native waits, or a wait loop",
-        "do not immediately wait again",
-        "Any later one-off wait requires fresh explicit opt-in",
+        "continue through worker completion, authorized dependent waves, integration, verification, and a completion candidate without requiring another user message",
+        "resume natively on that wake",
+        "automatically use native completion waits or completion polling at short bounded intervals",
+        "Do not require wait opt-in or another user or manual wake",
+        "coordinator remains `In Progress` and a message may wait up to one poll interval",
+        "process newer user input first and delivered worker results next",
+        "Start another interval only while active work remains and a specific completion or status condition can be observed",
+        "After processing an event, poll again only if active work remains",
+        "Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
+        "ordinary one-off instruction",
+        "Do not create a mode, option, scope, toggle, or persistent policy",
         "explicitly chosen one-shot",
         "at most one bounded native wait without separate wait opt-in",
         "all controllable workers are closed",
@@ -214,9 +213,10 @@ def validate() -> None:
         "Automatic coordinator wake",
         "later direct answer to its current close question",
         "without a close question or cross-turn persistence",
-        "explicitly opt in to that wait",
-        "coordinator turn stays **In Progress**",
-        "never sleeps, busy-polls, loops waits, or reflexively re-waits",
+        "continues through dependent waves, integration, verification, and a completion candidate without requiring another user message",
+        "coordinator remains **In Progress** and a message may wait up to one poll interval",
+        "never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
+        "not a mode, option, scope, toggle, or persistent policy",
     ):
         if phrase not in readme:
             fail(f"README.md is missing {phrase!r}")
@@ -228,8 +228,10 @@ def validate() -> None:
         "Snapshot: 2026-07-13",
         "queueing a completed-subagent notification",
         "without proven auto-wake",
-        "Default to a disclosed user/manual wake",
-        "keeps the coordinator turn `In Progress`",
+        "automatically use native completion waits or polling at short bounded intervals while active work remains",
+        "coordinator remains `In Progress` and a message may wait up to one poll interval",
+        "process newer input and delivered results before advancing dependent waves, integration, verification, and synthesis",
+        "never use shell sleep, a single long blind block, or polling without active work or a next condition",
     ):
         if phrase not in platforms:
             fail(f"platforms.md is missing {phrase!r}")
@@ -237,12 +239,13 @@ def validate() -> None:
     live_session = (SKILL_DIR / "references" / "live-session.md").read_text(encoding="utf-8")
     for phrase in (
         "queued notification may not start a coordinator turn",
-        "normally yield and disclose once",
-        "does not authorize blocking",
-        "explicitly opts in to that blocking wait",
-        "shortest practical bounded timeout",
-        "main turn stays `In Progress`",
-        "require fresh opt-in before another wait",
+        "automatically use native completion waits or polling at short bounded intervals",
+        "coordinator remains `In Progress` and a message may wait up to one poll interval",
+        "process newer user input first and delivered results next",
+        "advance dependent waves, integration, verification, and synthesis",
+        "Poll again after processing only while active work remains",
+        "Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
+        "Do not record a mode, option, scope, toggle, or persistent policy",
     ):
         if phrase not in live_session:
             fail(f"live-session.md is missing {phrase!r}")
@@ -292,20 +295,17 @@ def validate() -> None:
         "one_shot_blocked_handoff": {
             "one_shot_scope", "clear_incomplete_handoff", "no_cross_turn_persistence", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
         },
-        "return_after_dispatch": {
-            "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "responsive_yield", "disclose_next_user_or_manual_wake", "no_shell_sleep", "no_busy_poll"
+        "no_auto_wake_continues_to_completion_candidate": {
+            "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "dependent_waves", "integration", "verification", "completion_candidate", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition"
         },
         "auto_wake_dispatch_yields": {
-            "result_notifications", "notification_auto_wake", "dispatch_nonblocking", "yield_main_turn", "autonomous_synthesis_after_wake"
+            "result_notifications", "notification_auto_wake", "dispatch_nonblocking", "yield_main_turn", "resume_natively", "autonomous_synthesis_after_wake"
         },
-        "completion_candidate_without_auto_wake": {
-            "completion_candidate_required", "blocking_wait_opt_in_required", "no_wait_before_opt_in", "bounded_timeout_offer", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "disclose_next_user_or_manual_wake", "responsive_yield", "remain_ACTIVE"
+        "native_polling_stop_conditions": {
+            "stop_poll_for_result", "stop_poll_for_completion", "stop_poll_for_redirect", "stop_poll_for_stop", "stop_poll_for_one_off_pause_or_yield", "stop_poll_for_real_blocker", "process_before_next_interval", "poll_again_only_with_active_work", "no_poll_without_active_work_or_next_condition"
         },
-        "explicit_blocking_wait_opt_in": {
-            "explicit_blocking_wait_opt_in", "single_native_wait", "strict_dependency_wait", "bounded_timeout", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "no_shell_sleep", "no_busy_poll", "no_wait_loop", "no_repeated_wait"
-        },
-        "native_wait_timeout_returns_control": {
-            "wait_timeout_returns_control", "still_running_state_reported", "no_immediate_rewait", "fresh_opt_in_required_for_later_wait", "remain_ACTIVE"
+        "explicit_pause_or_yield_is_one_off": {
+            "ordinary_one_off_instruction", "one_off_yield_honored", "remain_ACTIVE", "no_mode", "no_option", "no_scope", "no_toggle", "no_persistent_policy", "automatic_progress_after_return"
         },
         "completion_candidate_stays_active": {
             "final_audit", "ask_close", "pending_close_confirmation", "remain_ACTIVE", "no_automatic_STOPPING"
@@ -421,11 +421,8 @@ def validate() -> None:
         unstable_handback_pending = False
         unstable_question_turn: int | None = None
         unstable_handback_accepted = False
-        completion_candidate_requested = False
-        blocking_wait_offered = False
-        blocking_wait_offer_turn: int | None = None
-        blocking_wait_opted_in = False
-        native_wait_count = 0
+        completion_poll_count = 0
+        poll_disclosure_count = 0
 
         for step in transcript["steps"]:
             tokens = set(step["expect"])
@@ -446,93 +443,64 @@ def validate() -> None:
                 required = {
                     "result_notifications",
                     "notification_presence_not_wake_proof",
-                    "disclose_next_user_or_manual_wake",
-                    "responsive_yield",
+                    "native_completion_polling",
                 }
                 if event != "coordinator" or capabilities["notification_auto_wake"] or not required.issubset(tokens):
-                    fail(f"queued-notification yield is not disclosed: {transcript_id}")
+                    fail(f"queued notifications do not continue through native polling: {transcript_id}")
             if "dispatch" in tokens and capabilities["result_notifications"] and not capabilities["notification_auto_wake"]:
                 required = {
                     "notification_presence_not_wake_proof",
                     "no_notification_auto_wake",
-                    "disclose_next_user_or_manual_wake",
-                    "responsive_yield",
+                    "native_completion_polling",
                 }
                 if event != "coordinator" or not required.issubset(tokens):
-                    fail(f"live dispatch omits queued-notification disclosure: {transcript_id}")
+                    fail(f"live dispatch omits continuous native polling: {transcript_id}")
             if event == "notification_wake":
-                required = {"auto_wake_started_coordinator_turn", "worker_result_delivered"}
+                required = {"auto_wake_started_coordinator_turn", "resume_natively", "worker_result_delivered"}
                 if not capabilities["notification_auto_wake"] or not required.issubset(tokens):
                     fail(f"invalid notification-triggered wake: {transcript_id}")
-            if "completion_candidate_required" in tokens:
-                if event != "user" or state != "ACTIVE":
-                    fail(f"completion-candidate wait must be user-authored while ACTIVE: {transcript_id}")
-                completion_candidate_requested = True
-            if "blocking_wait_opt_in_required" in tokens:
+            if "native_completion_polling" in tokens:
                 required = {
-                    "no_wait_before_opt_in",
-                    "bounded_timeout_offer",
-                    "main_turn_in_progress_disclosure",
-                    "new_input_may_be_delayed",
-                    "disclose_next_user_or_manual_wake",
-                    "responsive_yield",
-                    "remain_ACTIVE",
-                }
-                if (
-                    event != "coordinator"
-                    or state != "ACTIVE"
-                    or capabilities["notification_auto_wake"]
-                    or not completion_candidate_requested
-                    or blocking_wait_opted_in
-                    or not required.issubset(tokens)
-                ):
-                    fail(f"blocking wait was not offered responsively: {transcript_id}")
-                blocking_wait_offered = True
-                blocking_wait_offer_turn = turn
-            if "explicit_blocking_wait_opt_in" in tokens:
-                if (
-                    event != "user"
-                    or state != "ACTIVE"
-                    or not blocking_wait_offered
-                    or blocking_wait_offer_turn is None
-                    or turn <= blocking_wait_offer_turn
-                    or "bounded_timeout_acknowledged" not in tokens
-                ):
-                    fail(f"blocking wait opt-in is not explicit and informed: {transcript_id}")
-                blocking_wait_opted_in = True
-            if "single_native_wait" in tokens:
-                required = {
-                    "strict_dependency_wait",
+                    "short_bounded_poll_interval",
                     "bounded_timeout",
-                    "main_turn_in_progress_disclosure",
-                    "new_input_may_be_delayed",
+                    "active_work_and_next_condition_required",
                     "no_shell_sleep",
-                    "no_busy_poll",
-                    "no_wait_loop",
-                    "no_repeated_wait",
+                    "no_long_blind_block",
+                    "no_poll_without_active_work_or_next_condition",
                 }
-                native_wait_count += 1
                 if (
                     event != "coordinator"
+                    or state != "ACTIVE"
                     or capabilities["notification_auto_wake"]
-                    or not completion_candidate_requested
-                    or not blocking_wait_opted_in
                     or not required.issubset(tokens)
                 ):
-                    fail(f"invalid native dependency wait: {transcript_id}")
-                blocking_wait_offered = False
-                blocking_wait_offer_turn = None
-                blocking_wait_opted_in = False
+                    fail(f"invalid native completion poll: {transcript_id}")
+                completion_poll_count += 1
+                if "disclosure_once" in tokens:
+                    disclosure_required = {
+                        "main_turn_in_progress_disclosure",
+                        "message_may_wait_up_to_poll_interval",
+                    }
+                    if not disclosure_required.issubset(tokens):
+                        fail(f"native polling disclosure is incomplete: {transcript_id}")
+                    poll_disclosure_count += 1
             if event == "wait_timeout":
                 required = {
-                    "wait_timeout_returns_control",
+                    "short_poll_timeout",
                     "still_running_state_reported",
-                    "no_immediate_rewait",
-                    "fresh_opt_in_required_for_later_wait",
+                    "check_newer_input_between_intervals",
+                    "check_delivered_results_between_intervals",
+                    "active_work_remains",
+                    "specific_next_condition",
+                    "repeat_bounded_poll",
                     "remain_ACTIVE",
                 }
-                if not native_wait_count or not required.issubset(tokens):
-                    fail(f"native wait timeout did not return control: {transcript_id}")
+                if not completion_poll_count or not required.issubset(tokens):
+                    fail(f"native poll timeout did not re-check active work: {transcript_id}")
+            if "poll_cycle_stops" in tokens:
+                required = {"result_available", "newer_input_checked_before_result", "worker_result_delivered"}
+                if event not in {"worker_result", "delivery_batch"} or not required.issubset(tokens):
+                    fail(f"native poll did not stop to process a result: {transcript_id}")
 
             if "session_token" in tokens:
                 if event != "coordinator":
@@ -681,17 +649,19 @@ def validate() -> None:
             if "OFF" in tokens and state != "OFF":
                 fail(f"OFF assertion does not match state: {transcript_id}")
 
+        if completion_poll_count and poll_disclosure_count != 1:
+            fail(f"native polling must disclose its responsiveness cost once: {transcript_id}")
         if state != transcript["final_state"]:
             fail(f"modeled final state does not match transcript: {transcript_id}")
 
     required_transcripts = {
-        "native_dispatch_yield_second_turn",
+        "no_auto_wake_continues_through_completion_candidate",
         "auto_wake_dispatch_resumes_coordinator",
-        "explicit_completion_candidate_wait_requires_opt_in",
+        "explicit_pause_or_yield_is_one_off",
         "explicit_one_shot_bounded_completion",
         "one_shot_blocked_handoff",
         "stop_during_shared_write_and_late_result",
-        "persistence_fallback_rehydration",
+        "persistence_fallback_continuous_bounded_waves",
         "bare_explicit_invocation_defaults_live_and_requires_later_close",
         "new_work_cancels_pending_close",
         "close_confirmation_requires_separate_unstable_acceptance",
@@ -704,6 +674,26 @@ def validate() -> None:
     }
     if not required_transcripts.issubset(transcript_ids):
         fail("missing required transcript scenario")
+    continuous = next(
+        transcript for transcript in transcripts
+        if transcript["id"] == "no_auto_wake_continues_through_completion_candidate"
+    )
+    continuous_tokens = {token for step in continuous["steps"] for token in step["expect"]}
+    required_continuous = {
+        "native_completion_polling",
+        "repeat_bounded_poll",
+        "user_delta_first",
+        "poll_cycle_stops",
+        "dispatch_dependent_implementation",
+        "integrate_completed_work",
+        "dispatch_verification_wave",
+        "verification_completed",
+        "completion_candidate",
+        "pending_close_confirmation",
+        "remain_ACTIVE",
+    }
+    if not required_continuous.issubset(continuous_tokens):
+        fail("no-auto-wake transcript must continue through verification to an ACTIVE completion candidate")
     bare_live = next(
         transcript for transcript in transcripts
         if transcript["id"] == "bare_explicit_invocation_defaults_live_and_requires_later_close"
@@ -739,17 +729,19 @@ def validate() -> None:
         "result_notifications",
         "notification_presence_not_wake_proof",
         "no_notification_auto_wake",
-        "disclose_next_user_or_manual_wake",
-        "responsive_yield",
+        "native_completion_polling",
+        "short_bounded_poll_interval",
+        "disclosure_once",
+        "message_may_wait_up_to_poll_interval",
+        "process_newer_input_between_intervals",
+        "process_delivered_results_between_intervals",
+        "active_work_and_next_condition_required",
+        "no_user_or_manual_wake_dependency",
+        "no_long_blind_block",
+        "no_poll_without_active_work_or_next_condition",
         "notification_auto_wake",
         "auto_wake_started_coordinator_turn",
-        "completion_candidate_required",
-        "blocking_wait_opt_in_required",
-        "no_wait_before_opt_in",
-        "bounded_timeout_offer",
-        "explicit_blocking_wait_opt_in",
-        "bounded_timeout_acknowledged",
-        "single_native_wait",
+        "resume_natively",
         "strict_dependency_wait",
         "bounded_timeout",
         "main_turn_in_progress_disclosure",
@@ -758,10 +750,24 @@ def validate() -> None:
         "no_busy_poll",
         "no_wait_loop",
         "no_repeated_wait",
-        "wait_timeout_returns_control",
+        "short_poll_timeout",
         "still_running_state_reported",
-        "no_immediate_rewait",
-        "fresh_opt_in_required_for_later_wait",
+        "check_newer_input_between_intervals",
+        "check_delivered_results_between_intervals",
+        "repeat_bounded_poll",
+        "poll_cycle_stops",
+        "dispatch_dependent_implementation",
+        "integrate_completed_work",
+        "dispatch_verification_wave",
+        "verification_completed",
+        "ordinary_one_off_instruction",
+        "one_off_yield_honored",
+        "no_mode",
+        "no_option",
+        "no_scope",
+        "no_toggle",
+        "no_persistent_policy",
+        "automatic_progress_after_return",
         "queued_input",
         "HELD_to_QUEUED",
         "ACTIVE_to_STOPPING",

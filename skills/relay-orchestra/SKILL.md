@@ -24,7 +24,7 @@ One explicit invocation opens one bounded, multi-turn live session.
 4. Do not activate from quoted text, discussion of the skill, or a previously completed session.
 5. Deactivate only through the `ACTIVE -> STOPPING -> OFF` state machine below. Later work requires a new invocation.
 
-Treat milestone reports and apparent objective completion as intermediate. Do not deactivate a live session merely because the latest objective appears complete.
+Treat milestone reports and apparent objective completion as intermediate. Do not deactivate a live session merely because the latest objective appears complete. Running or completed leaf agents are not a reason to stop orchestration: continue through worker completion, authorized dependent waves, integration, verification, and a completion candidate without requiring another user message.
 
 ### Session States
 
@@ -71,13 +71,13 @@ Check result notification and automatic coordinator wake separately. Notificatio
 
 If subagents are unavailable, offer sequential local execution or dispatch-ready briefs. Treat approval of that fallback as work authorization only, never as close confirmation. In one-shot scope, use only an already-authorized safe fallback or hand back instead of opening another turn for approval. If background continuation across turns is unavailable, disclose that interactive accumulation is limited and use short bounded waves. If lifecycle controls are incomplete, disclose the limitation before writer dispatch and prefer read-only or serialized work.
 
-Use seamless native continuity when skill instructions, ledger state, and handles persist. Check these separately; conversation history alone does not prove any of them. When skill or ledger persistence is unavailable, include a compact non-secret session token and require the next turn to invoke the skill explicitly with the client's supported mechanism and this portable payload:
+Use seamless native continuity when skill instructions, ledger state, and handles persist. Check these separately; conversation history alone does not prove any of them. When skill or ledger persistence is unavailable, include a compact non-secret session token before a permitted yield. On a verified automatic notification wake, rehydrate it without user action when the runtime can reload the skill; otherwise treat auto-wake as unusable and keep the current turn in progress. After an explicit one-off user request to pause or yield until they return, require the next user turn to invoke the skill explicitly with the client's supported mechanism and this portable payload:
 
     resume <token>: <next instruction>
 
 The client-specific wrapper reloads the skill; [platforms.md](references/platforms.md) owns wrapper examples. The token compactly carries session and freshness markers, state and requirement revision, count mode and ceiling, exact used-handle accounting, nonterminal handle control records, tree stability, queued/held work, and any pending close question with its audited revision and issued turn. Never let a resumed token overwrite newer available state. If close confirmation is pending, require the direct answer through the same explicit invocation mechanism with `resume <token>: <answer>`.
 
-A token restores instructions and compact state, not control of lost handles. When handles do not persist, leave no worker running across the yield: use bounded waves, settle or close each wave, then return a token. If a recorded nonterminal handle is unexpectedly unavailable, mark it `unknown`, retain it in exact used-handle accounting, and do not replace it past an `EXACT` ceiling. If it may write, mark the tree unstable and freeze repository operations and overlapping writer dispatch until terminal state is confirmed. If essential state cannot fit safely in the token, disclose a one-turn limitation and require a fresh explicit invocation.
+A token restores instructions and compact state, not control of lost handles. When handles do not persist, leave no worker running across a permitted yield: use bounded waves and settle or close each wave first. If a recorded nonterminal handle is unexpectedly unavailable, mark it `unknown`, retain it in exact used-handle accounting, and do not replace it past an `EXACT` ceiling. If it may write, mark the tree unstable and freeze repository operations and overlapping writer dispatch until terminal state is confirmed. If essential state cannot fit safely in the token, disclose a one-turn limitation before honoring a one-off pause or yield and require a fresh explicit invocation.
 
 Read [platforms.md](references/platforms.md) only for unfamiliar clients.
 
@@ -85,9 +85,11 @@ Read [platforms.md](references/platforms.md) only for unfamiliar clients.
 
 After live-session dispatch, choose the path supported by the host:
 
-- If result notification automatically wakes the coordinator, dispatch non-blocking work and yield the main turn.
-- If notifications queue without auto-wake, default to a responsive yield when the user should remain free to send instructions. Disclose once that synthesis resumes on the next user message or manual wake.
-- If auto-wake is unavailable and the user requires a completion candidate without another user or manual wake, do not treat that request alone as permission to block. Offer one native wait only when the next action strictly depends on worker results, and invoke it only after the user explicitly opts in to that blocking wait. Before invocation, state the shortest practical bounded timeout and disclose that the main turn stays `In Progress` and may delay handling new input until the wait returns. Never use shell sleep, busy-poll, chained native waits, or a wait loop. On timeout, return control, report the still-running state, and do not immediately wait again. Any later one-off wait requires fresh explicit opt-in and a newly disclosed bound.
+- If result notification automatically wakes the coordinator, dispatch non-blocking work, yield the main turn, and resume natively on that wake.
+- If notifications do not auto-wake the coordinator, automatically use native completion waits or completion polling at short bounded intervals. Do not require wait opt-in or another user or manual wake. Disclose once that the coordinator remains `In Progress` and a message may wait up to one poll interval.
+- Between intervals, process newer user input first and delivered worker results next, update the ledger, and advance newly unblocked waves, integration, verification, and synthesis. Start another interval only while active work remains and a specific completion or status condition can be observed.
+- End the current polling cycle when there is a result to process, orchestration work completes, the user redirects, stops, or requests a one-off pause or yield, or a real blocker requires user input. After processing an event, poll again only if active work remains. Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition.
+- Honor an explicit user request to pause or yield until they return as an ordinary one-off instruction. Do not create a mode, option, scope, toggle, or persistent policy; absent a fresh request, later continuation returns to automatic progress.
 
 One-shot work cannot depend on a later user wake. An explicitly chosen one-shot may use at most one bounded native wait without separate wait opt-in, only when completion strictly depends on worker results. Before waiting, state the timeout and disclose that the main turn stays `In Progress` and may delay handling new input; if the wait cannot finish safely, hand back clearly and deactivate.
 

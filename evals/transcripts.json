@@ -1,14 +1,20 @@
 [
   {
-    "id": "native_dispatch_yield_second_turn",
+    "id": "no_auto_wake_continues_through_completion_candidate",
     "scope": "live",
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly start a live session with exactly two agents.", "expect": ["live_scope", "OFF_to_ACTIVE", "EXACT_2"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch workers, disclose that queued results resume on the next user or manual wake, and yield responsively.", "expect": ["dispatch", "shared_announcement", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "disclose_next_user_or_manual_wake", "responsive_yield", "no_shell_sleep", "no_busy_poll", "native_continuity"]},
-      {"turn": 2, "event": "delivery_batch", "detail": "A worker result and a newer user delta arrive together.", "inputs": [{"kind": "worker_result", "source": "A", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Queue a compatible change for B and hold accessibility review until A completes."}], "expect": ["user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2"]},
-      {"turn": 2, "event": "coordinator", "detail": "Route the new requirement, then process A's result and yield again.", "expect": ["revision_increment", "same_turn_receipt", "ACTIVE"]}
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch research and begin a native short bounded completion poll because notifications do not wake the coordinator.", "expect": ["dispatch", "shared_announcement", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "wait_timeout", "detail": "The short interval ends while research is still active.", "expect": ["short_poll_timeout", "still_running_state_reported", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "active_work_remains", "specific_next_condition", "repeat_bounded_poll", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "With no newer input or delivered result and active research remaining, begin the next bounded interval.", "expect": ["native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "delivery_batch", "detail": "Research completes as a newer compatible user delta arrives, ending the interval for ordered processing.", "inputs": [{"kind": "worker_result", "source": "research", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Apply the new compatibility requirement during implementation."}], "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2", "worker_result_delivered", "research_completed", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record the delta, synthesize research, dispatch the authorized dependent implementation, and begin another bounded interval.", "expect": ["revision_increment", "same_turn_receipt", "synthesize_research", "dispatch_dependent_implementation", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "worker_result", "detail": "Implementation completes during the interval, which ends for result processing.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "implementation_completed", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Integrate the completed implementation, dispatch authorized verification, and begin another bounded interval.", "expect": ["integrate_completed_work", "dispatch_verification_wave", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "worker_result", "detail": "Verification completes during the interval, which ends for result processing.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "verification_completed", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Synthesize verification, audit the latest revision, present the completion candidate, ask to close, and remain active.", "expect": ["synthesize_verification", "final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   },
@@ -19,22 +25,21 @@
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Dispatch non-blocking work and yield because the host confirms notification-triggered coordinator wake.", "expect": ["dispatch_nonblocking", "result_notifications", "notification_auto_wake", "yield_main_turn", "ACTIVE"]},
-      {"turn": 2, "event": "notification_wake", "detail": "A worker result notification starts a new coordinator turn.", "expect": ["auto_wake_started_coordinator_turn", "worker_result_delivered", "ACTIVE"]},
+      {"turn": 2, "event": "notification_wake", "detail": "A worker result notification starts a new coordinator turn and resumes orchestration natively.", "expect": ["auto_wake_started_coordinator_turn", "resume_natively", "worker_result_delivered", "ACTIVE"]},
       {"turn": 2, "event": "coordinator", "detail": "Process the result and continue the active live session.", "expect": ["autonomous_synthesis_after_wake", "ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   },
   {
-    "id": "explicit_completion_candidate_wait_requires_opt_in",
+    "id": "explicit_pause_or_yield_is_one_off",
     "scope": "live",
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
     "initial_state": "ACTIVE",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Reach a completion candidate without another message even though queued notifications do not wake the coordinator.", "expect": ["completion_candidate_required"]},
-      {"turn": 1, "event": "coordinator", "detail": "Explain the default user/manual wake, disclose one blocking wait's responsiveness cost and bounded timeout, ask for explicit opt-in, and yield without waiting.", "expect": ["blocking_wait_opt_in_required", "no_wait_before_opt_in", "bounded_timeout_offer", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "disclose_next_user_or_manual_wake", "responsive_yield", "remain_ACTIVE"]},
-      {"turn": 2, "event": "user", "detail": "I explicitly opt in to one native blocking wait with the offered bound.", "expect": ["explicit_blocking_wait_opt_in", "bounded_timeout_acknowledged"]},
-      {"turn": 2, "event": "coordinator", "detail": "Issue one bounded native wait because the next action strictly depends on worker results.", "expect": ["single_native_wait", "strict_dependency_wait", "bounded_timeout", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "no_shell_sleep", "no_busy_poll", "no_wait_loop", "no_repeated_wait"]},
-      {"turn": 2, "event": "wait_timeout", "detail": "The native wait times out while workers remain active.", "expect": ["wait_timeout_returns_control", "still_running_state_reported", "no_immediate_rewait", "fresh_opt_in_required_for_later_wait", "remain_ACTIVE"]}
+      {"turn": 1, "event": "user", "detail": "Yield Relay Orchestra until I return with my next related instruction.", "expect": ["explicit_pause_or_yield", "ordinary_one_off_instruction"]},
+      {"turn": 1, "event": "coordinator", "detail": "Honor this yield once and keep the live session active without creating interaction policy.", "expect": ["one_off_yield_honored", "yield_main_turn", "no_mode", "no_option", "no_scope", "no_toggle", "no_persistent_policy", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Continue the related work.", "expect": ["return_with_related_instruction"]},
+      {"turn": 2, "event": "coordinator", "detail": "Continue the existing live session under automatic progress without a fresh activation.", "expect": ["automatic_progress_after_return", "no_new_activation", "dispatch_or_queue", "ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   },
@@ -76,16 +81,15 @@
     "final_state": "OFF"
   },
   {
-    "id": "persistence_fallback_rehydration",
+    "id": "persistence_fallback_continuous_bounded_waves",
     "scope": "live",
     "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly activate a multi-turn research session.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Run a bounded wave, settle all handles, and emit a compact token with a portable resume payload.", "expect": ["persistence_disclosure", "bounded_wave", "no_live_handle_at_yield", "session_token", "portable_resume_payload"]},
-      {"turn": 1, "event": "yield", "detail": "Return control after the bounded wave.", "expect": ["yield_main_turn"]},
-      {"turn": 2, "event": "user", "detail": "Explicitly invoke the skill with the client's mechanism and include resume token plus the next instruction.", "expect": ["explicit_skill_resume", "portable_resume_payload"]},
-      {"turn": 2, "event": "coordinator", "detail": "Rehydrate compact state, settle the next bounded wave, and issue the next token.", "expect": ["rehydrate", "no_claim_of_handle_recovery", "bounded_wave", "no_live_handle_at_yield", "session_token", "ACTIVE"]}
+      {"turn": 1, "event": "coordinator", "detail": "Disclose the persistence limits and run a bounded wave in the current turn with native short completion polling.", "expect": ["persistence_disclosure", "bounded_wave", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "worker_result", "detail": "The bounded wave completes through the native completion poll.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "bounded_wave_complete", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Settle completed handles, dispatch the next dependent bounded wave, and begin its bounded completion poll in the same turn.", "expect": ["controllable_workers_closed", "same_turn_next_wave", "bounded_wave", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   },
@@ -96,12 +100,12 @@
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "$relay-orchestra run one reviewer.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch the reviewer, disclose that synthesis resumes on the next user or manual wake, and keep the live session active.", "expect": ["dispatch", "shared_announcement", "responsive_session", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "disclose_next_user_or_manual_wake", "responsive_yield", "no_shell_sleep", "no_busy_poll", "ACTIVE"]},
-      {"turn": 2, "event": "worker_result", "detail": "The reviewer completes and the result is ready for final audit.", "expect": ["completion_criteria_candidate", "ACTIVE"]},
-      {"turn": 2, "event": "coordinator", "detail": "Audit, present the completion candidate and residual risks, ask to close, and remain active.", "expect": ["final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "later_close_confirmation_required", "remain_ACTIVE"]},
-      {"turn": 3, "event": "user", "detail": "Yes, close Relay Orchestra.", "expect": ["direct_close_confirmation", "close_confirmation_revision_match"]},
-      {"turn": 3, "event": "coordinator", "detail": "Consume the later direct answer and begin safe shutdown.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING", "freeze_dispatch"]},
-      {"turn": 3, "event": "coordinator", "detail": "Close controllable workers, confirm shared-tree writers are terminal, and deactivate.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF", "OFF"]}
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch the reviewer and begin native short completion polling because notifications do not wake the coordinator.", "expect": ["dispatch", "shared_announcement", "responsive_session", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "worker_result", "detail": "The reviewer completes during the interval, which ends for result processing and final audit.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "completion_criteria_candidate", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit, present the completion candidate and residual risks, ask to close, and remain active.", "expect": ["final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "later_close_confirmation_required", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Yes, close Relay Orchestra.", "expect": ["direct_close_confirmation", "close_confirmation_revision_match"]},
+      {"turn": 2, "event": "coordinator", "detail": "Consume the later direct answer and begin safe shutdown.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING", "freeze_dispatch"]},
+      {"turn": 2, "event": "coordinator", "detail": "Close controllable workers, confirm shared-tree writers are terminal, and deactivate.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF", "OFF"]}
     ],
     "final_state": "OFF"
   },
@@ -203,7 +207,8 @@
     "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
     "initial_state": "ACTIVE",
     "steps": [
-      {"turn": 1, "event": "coordinator", "detail": "Emit a token recording an open shared-tree writer and exact used-handle count.", "expect": ["session_token", "portable_resume_payload", "nonterminal_handle_recorded", "exact_used_handle_accounting"]},
+      {"turn": 1, "event": "user", "detail": "Explicitly request a one-off yield until I return while the shared-tree writer remains active.", "expect": ["explicit_pause_or_yield", "ordinary_one_off_instruction"]},
+      {"turn": 1, "event": "coordinator", "detail": "Honor the one-off yield and emit a token recording the open writer and exact used-handle count.", "expect": ["one_off_yield_honored", "no_mode", "no_option", "no_scope", "no_toggle", "no_persistent_policy", "session_token", "portable_resume_payload", "nonterminal_handle_recorded", "exact_used_handle_accounting"]},
       {"turn": 1, "event": "yield", "detail": "Yield expecting the native handle to persist.", "expect": ["yield_main_turn"]},
       {"turn": 2, "event": "user", "detail": "Explicitly resume with the token.", "expect": ["explicit_skill_resume", "portable_resume_payload"]},
       {"turn": 2, "event": "coordinator", "detail": "The writer handle is unavailable; retain its count and freeze unsafe tree work.", "expect": ["rehydrate", "handle_lifecycle_unknown", "retain_exact_accounting", "tree_unstable", "repository_operations_prohibited", "freeze_overlapping_writer_dispatch", "no_replacement_past_EXACT_ceiling", "remain_ACTIVE"]}

@@ -9,9 +9,9 @@ Use this reference when the user changes requirements while agents are active, w
 3. Compare the delta with every active and queued work item.
 4. Preserve valid work, redirect invalid work, and record intentionally deferred ideas.
 5. Dispatch newly unblocked work up to capacity.
-6. Choose responsive yield, auto-wake yield, or one dependency wait under the rules below.
+6. Choose native auto-wake yield or continuous bounded native completion polling under the rules below.
 
-Before the first yield, record whether skill instructions, the ledger, and agent handles each persist across turns. Use native continuity when all three do. If skill or ledger state does not persist, emit the compact session token and require the client-specific explicit skill invocation plus the portable `resume <token>:` payload defined in `SKILL.md`; if handles do not persist, settle every worker before yielding because the token cannot restore control. On resume, reject older available token state. Treat an unexpectedly unavailable nonterminal handle as `unknown`, retain its exact count, and freeze repository operations and overlapping dispatch when it may still write.
+Before a permitted yield, record whether skill instructions, the ledger, and agent handles each persist across turns. Use native continuity when all three do. If skill or ledger state does not persist, emit the compact session token defined in `SKILL.md`; rehydrate it automatically after a usable notification wake, or require the client-specific explicit skill invocation plus `resume <token>:` only after a user-requested one-off pause or yield. If handles do not persist, settle every worker before yielding because the token cannot restore control. On resume, reject older available token state. Treat an unexpectedly unavailable nonterminal handle as `unknown`, retain its exact count, and freeze repository operations and overlapping dispatch when it may still write.
 
 ## Route A User Delta
 
@@ -63,9 +63,11 @@ When the latest requirement revision appears complete, audit the integrated outc
 
 The coordinator is a control plane, not an extra background implementer. Check result delivery and notification-triggered auto-wake separately; a queued notification may not start a coordinator turn.
 
-- With auto-wake, dispatch non-blocking work and yield.
-- Without auto-wake, normally yield and disclose once that synthesis resumes on the next user or manual wake.
-- A request for a completion candidate without another user or manual wake does not authorize blocking. When worker results are a strict dependency, offer one native wait and invoke it only after the user explicitly opts in to that blocking wait. State the shortest practical bounded timeout and disclose that the main turn stays `In Progress` and may delay new input. Never use shell sleep, busy-poll, loop waits, or immediately re-wait after a timeout; report the still-running state, return control, and require fresh opt-in before another wait.
+- With auto-wake, dispatch non-blocking work, yield, and resume natively when the notification wakes the coordinator.
+- Without auto-wake, automatically use native completion waits or polling at short bounded intervals while active work remains and a specific completion or status condition can be observed. Disclose once that the coordinator remains `In Progress` and a message may wait up to one poll interval; do not require wait opt-in or another user or manual wake.
+- Between intervals, process newer user input first and delivered results next, then advance dependent waves, integration, verification, and synthesis. A result to process, completed orchestration work, redirect, stop, one-off pause or yield request, or real blocker ends the polling cycle. Poll again after processing only while active work remains.
+- Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition.
+- Honor a request to pause or yield until the user returns once. Do not record a mode, option, scope, toggle, or persistent policy; automatic progress applies again without a fresh request.
 
 When the user sends a new message, acknowledge what changed before reporting old progress. Never answer “wait for the agents” when the new instruction can be accepted, queued, or routed immediately.
 
