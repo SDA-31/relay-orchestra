@@ -1,67 +1,99 @@
 ---
 name: relay-orchestra
-description: EXPLICIT-ONLY, run-scoped coordination of parallel native subagents across a multi-turn session for faster research, review, and implementation with user control and capability-aware fallbacks.
+description: EXPLICIT-ONLY coordination of parallel native subagents with either one-shot scope that deactivates in the same response without a close question, or a run-scoped live session (the bare explicit default) that stays active until a later direct explicit close confirmation or an explicit stop.
 ---
 
 # Relay Orchestra
 
 Act as the responsive control layer between the user and leaf agents. Translate changing intent into owned work, keep workers coordinated, and preserve one coherent result without making the user wait for an entire wave before giving more instructions.
 
-## Session Contract
+## Invocation Scope
 
-One explicit invocation opens one bounded, multi-turn orchestration session.
+Relay Orchestra activates only through the client's explicit skill mechanism or an unambiguous request to use the Relay Orchestra skill. Choose scope from explicit user wording:
 
-1. Activate through `$relay-orchestra`, a client-specific skill command, or an unambiguous request to start Relay Orchestra.
-2. Keep the session active across related follow-ups while work is active, queued, held, or awaiting integration. Follow-ups inside the active session do not need to invoke the skill again.
+- **One-shot:** `for this message`, `for this turn only`, `one time`, or equivalent applies Relay only while answering the current user message. Run one bounded wave, wait only when this response strictly depends on its results, settle all controllable workers, report completed and incomplete work, and deactivate in the same response. Do not persist a session or ask a close question. If capability or authorization prevents completion, hand back clearly and deactivate.
+- **Live session:** `start a live session`, `multi-turn`, or equivalent opens the live lifecycle below. A bare explicit Relay invocation also defaults to a live session; never infer one-shot scope from ordinary task wording or ask which scope the user intended.
+
+## Live Session Contract
+
+One explicit invocation opens one bounded, multi-turn live session.
+
+1. Activate through the client's explicit skill picker or command, or an unambiguous request to start the Relay Orchestra skill.
+2. Keep the session active across related follow-ups, including while work is active, queued, held, awaiting integration, or awaiting close confirmation. Follow-ups inside the active session do not need to invoke the skill again.
 3. Accept additions, corrections, reprioritization, agent-count changes, and cancellations immediately. Never reject a relevant update merely because workers are already running.
 4. Do not activate from quoted text, discussion of the skill, or a previously completed session.
 5. Deactivate only through the `ACTIVE -> STOPPING -> OFF` state machine below. Later work requires a new invocation.
 
-Treat milestone reports as intermediate. Do not accidentally finalize a session that still has active workers, queued work, unresolved user changes, or an explicit request to keep it open.
+Treat milestone reports and apparent objective completion as intermediate. Do not deactivate a live session merely because the latest objective appears complete.
 
 ### Session States
 
-- `ACTIVE`: accept and route related user deltas; dispatch is allowed.
+- `ACTIVE`: accept and route related user deltas; dispatch is allowed, including while close confirmation is pending.
 - `STOPPING`: freeze new dispatch, interrupt or settle workers, inspect partial writes, account for results, and prepare the final handoff.
 - `OFF`: no session work or worker result is silently absorbed. A new orchestration request must activate a new session.
 
-Both normal completion and an explicit stop move `ACTIVE -> STOPPING`; never move directly from `ACTIVE` to `OFF`. Move `STOPPING -> OFF` only after controllable workers are closed and shared-tree writers are terminal. If a shared-tree writer cannot be controlled or confirmed terminal, remain `STOPPING`, mark the tree unstable, and prohibit repository operations. Move to `OFF` with that writer live only after the user explicitly accepts hand-back of the unstable tree.
+Apparent live-session completion does not enter `STOPPING`. Only a valid answer to a pending close question or a user-authored explicit stop while `ACTIVE` authorizes `ACTIVE -> STOPPING`; never move directly from `ACTIVE` to `OFF`. Move `STOPPING -> OFF` only after all controllable workers are closed and shared-tree writers are terminal. If a shared-tree writer cannot be controlled or confirmed terminal, remain `STOPPING`, mark the tree unstable, and prohibit repository operations. Close confirmation or an explicit stop authorizes only entry into `STOPPING`; after disclosing the live-writer risk, ask a distinct hand-back question and move to `OFF` with that writer live only after a later user-authored direct acceptance while `STOPPING`.
+
+### Request Close Confirmation
+
+**Live closure invariant:** Authorization to perform work, approve a fallback, approve a milestone, or answer any non-close question never authorizes closure. The first live-session turn that reports completion must remain `ACTIVE` and end with the close question; never enter `STOPPING` or `OFF` in that turn. This guard does not apply to explicit one-shot scope, which deactivates in its completion response without asking.
+
+When the completion criteria appear satisfied, stay `ACTIVE` and:
+
+1. perform the final audit against the latest requirement revision
+2. apply the handle lifecycle rules below, closing audited handles that are no longer useful for an immediate correction
+3. present a completion-candidate synthesis with completed work and residual risks
+4. ask one concise question equivalent to: `Everything looks complete. May I close Relay Orchestra?`
+5. record pending close confirmation with the audited revision, issued question, and coordinator turn in the ledger
+
+Treat `yes`, `yes, thanks`, `all good`, and equivalent semantic affirmation as provisional closure authorization only when it is user-authored on a later turn, directly answers the still-pending question, its audited revision is current, and the whole reply is unconditional and introduces no related work, correction, or doubt. Generic thanks, work or fallback approval, milestone approval, statements that work is done, stale assent, ambiguous or conditional assent, and mixed assent plus new work do not authorize closure. Interpret meaning in the user's language, not keywords. A user-authored direct command such as `Stop Relay Orchestra` or `Close the Relay session` authorizes `ACTIVE -> STOPPING` immediately while `ACTIVE` without a pending question; clarify a command that also requests continued work.
+
+Before consuming close authorization, process newer user input and drain already-delivered safety events and material results. A same-batch material result can invalidate authorization. Clear the pending question and provisional authorization when the requirement revision changes, the user supplies related work, correction, doubt, or refusal, or a material result invalidates the synthesis. Reject answers to cleared questions or non-current audited revisions. Re-audit before asking again. For ambiguous or conditional assent, remain `ACTIVE` and ask one close-specific clarification; record it as the replacement pending question for the same audited revision.
 
 ## Capability Gate
 
 Before dispatch, inspect whether the client supports:
 
 1. distinct subagents or delegated sessions
-2. background execution across user turns and result notifications
-3. follow-up messages, queued input, interruption, and close controls
-4. concurrency and its current capacity
-5. isolated writer checkouts such as worktrees
-6. persistence of loaded skill instructions across turns
-7. persistence of the live ledger across turns
-8. persistence and controllability of agent handles across turns
+2. background execution across user turns
+3. result delivery or notification
+4. notification-triggered automatic coordinator wake or resumption
+5. follow-up messages, queued input, interruption, and close controls
+6. concurrency and its current capacity
+7. isolated writer checkouts such as worktrees
+8. persistence of loaded skill instructions across turns
+9. persistence of the live ledger across turns
+10. persistence and controllability of agent handles across turns
 
 Use native capabilities. Do not substitute external agent CLIs or background processes unless the user explicitly requests them.
 
-If subagents are unavailable, offer sequential local execution or dispatch-ready briefs. If background continuation across turns is unavailable, disclose that interactive accumulation is limited and use short bounded waves. If lifecycle controls are incomplete, disclose the limitation before writer dispatch and prefer read-only or serialized work.
+Check result notification and automatic coordinator wake separately. Notification presence alone does not prove wake support.
 
-Use seamless native continuity when skill instructions, ledger state, and handles persist. Check these separately; conversation history alone does not prove any of them. When skill or ledger persistence is unavailable, include a compact non-secret session token in the receipt and provide this explicit continuation form:
+If subagents are unavailable, offer sequential local execution or dispatch-ready briefs. Treat approval of that fallback as work authorization only, never as close confirmation. In one-shot scope, use only an already-authorized safe fallback or hand back instead of opening another turn for approval. If background continuation across turns is unavailable, disclose that interactive accumulation is limited and use short bounded waves. If lifecycle controls are incomplete, disclose the limitation before writer dispatch and prefer read-only or serialized work.
 
-    $relay-orchestra resume <token>: <next instruction>
+Use seamless native continuity when skill instructions, ledger state, and handles persist. Check these separately; conversation history alone does not prove any of them. When skill or ledger persistence is unavailable, include a compact non-secret session token and require the next turn to invoke the skill explicitly with the client's supported mechanism and this portable payload:
 
-The `$relay-orchestra` prefix explicitly reloads the skill; the token rehydrates compact run state. The token must carry the session ID, state, requirement revision, count mode, used handles, and compact queued/held summaries needed to rehydrate the run. Do not require this form when native persistence works.
+    resume <token>: <next instruction>
 
-A token restores instructions and compact state, not control of lost handles. When agent handles do not persist, leave no worker running across the yield: use bounded waves, settle or close each wave, then return a token for the next turn. If sensitive or essential state cannot fit safely in the token, disclose that the session is one-turn only and require a fresh explicit invocation with a new brief.
+The client-specific wrapper reloads the skill; [platforms.md](references/platforms.md) owns wrapper examples. The token compactly carries session and freshness markers, state and requirement revision, count mode and ceiling, exact used-handle accounting, nonterminal handle control records, tree stability, queued/held work, and any pending close question with its audited revision and issued turn. Never let a resumed token overwrite newer available state. If close confirmation is pending, require the direct answer through the same explicit invocation mechanism with `resume <token>: <answer>`.
+
+A token restores instructions and compact state, not control of lost handles. When handles do not persist, leave no worker running across the yield: use bounded waves, settle or close each wave, then return a token. If a recorded nonterminal handle is unexpectedly unavailable, mark it `unknown`, retain it in exact used-handle accounting, and do not replace it past an `EXACT` ceiling. If it may write, mark the tree unstable and freeze repository operations and overlapping writer dispatch until terminal state is confirmed. If essential state cannot fit safely in the token, disclose a one-turn limitation and require a fresh explicit invocation.
 
 Read [platforms.md](references/platforms.md) only for unfamiliar clients.
 
 ## Responsiveness Contract
 
-After dispatching non-blocking work, return control to the user promptly. Do not enter a long blocking wait merely to collect results. Keep the coordinator available for the next instruction while native background agents run.
+After live-session dispatch, choose the path supported by the host:
+
+- If result notification automatically wakes the coordinator, dispatch non-blocking work and yield the main turn.
+- If notifications queue without auto-wake, default to a responsive yield when the user should remain free to send instructions. Disclose once that synthesis resumes on the next user message or manual wake.
+- If auto-wake is unavailable and the user requires a completion candidate without another user or manual wake, do not treat that request alone as permission to block. Offer one native wait only when the next action strictly depends on worker results, and invoke it only after the user explicitly opts in to that blocking wait. Before invocation, state the shortest practical bounded timeout and disclose that the main turn stays `In Progress` and may delay handling new input until the wait returns. Never use shell sleep, busy-poll, chained native waits, or a wait loop. On timeout, return control, report the still-running state, and do not immediately wait again. Any later one-off wait requires fresh explicit opt-in and a newly disclosed bound.
+
+One-shot work cannot depend on a later user wake. An explicitly chosen one-shot may use at most one bounded native wait without separate wait opt-in, only when completion strictly depends on worker results. Before waiting, state the timeout and disclose that the main turn stays `In Progress` and may delay handling new input; if the wait cannot finish safely, hand back clearly and deactivate.
 
 - Acknowledge each new instruction in the same turn with a compact control receipt.
 - Prioritize the newest user message over worker notifications and planned follow-up waves.
 - Do not fill idle time with competing implementation that makes redirection slower. Perform only immediate coordination, integration, or truly critical local work.
-- Wait only when the next action strictly depends on a result and the host cannot deliver it asynchronously. Use bounded waits.
 - When the host delivers a worker result, process it as another event; do not finalize before checking for newer user input.
 
 Use this receipt shape when useful:
@@ -84,7 +116,8 @@ Track:
 
 - session state: ACTIVE, STOPPING, or OFF
 - current objective and latest internal requirement revision
-- continuity support for skill instructions, ledger, and agent handles; fallback token when needed
+- pending close confirmation, its audited requirement revision, issued question, and coordinator turn
+- continuity support for result delivery, automatic wake, skill instructions, ledger, and agent handles; fallback token when needed
 - count mode, exact ceiling when set, and distinct successfully created handles
 - agent ID when available, stable functional role, optional client nickname, work status, handle state, context value, ownership, and isolation
 - active, queued, held, superseded, failed, and completed work
@@ -230,13 +263,15 @@ Send missing context back to the same agent when useful. Do not count `BLOCKED`,
 - Retry a failed spawn at most once when the failure appears transient. Then mark that slot failed and continue exact accounting.
 - Report hung workers instead of waiting forever.
 - On urgent redirection, interrupt only agents whose work became invalid; queue compatible changes for context-rich agents.
-- On session stop, enter `STOPPING`, stop new waves, interrupt active workers, inspect partial changes, account for results, and close workers when supported.
-- Confirm shared-tree writers reached a terminal state before final audit. Otherwise remain `STOPPING`, mark the tree unstable, prohibit further repository operations, and report the live-worker risk. Ask whether the user explicitly accepts hand-back before moving to `OFF` with an uncontrollable writer live.
+- On a user-authored explicit live-session stop or valid close confirmation, enter `STOPPING`, stop new waves, interrupt or settle active workers, inspect partial changes, account for results, and close workers when supported.
+- Confirm all controllable workers are closed and shared-tree writers reached a terminal state before completing shutdown. Otherwise remain `STOPPING`, mark the tree unstable, prohibit further repository operations, and report the live-worker risk. Ask a distinct hand-back question after that disclosure; do not reuse close confirmation or the explicit stop as acceptance. Move to `OFF` with an uncontrollable writer live only after a later user-authored direct acceptance while `STOPPING`.
 - A result arriving during `STOPPING` is still part of shutdown: audit it before deciding whether `OFF` is safe. A result arriving after `OFF` does not reopen the session or get integrated automatically. Ignore an ordinary read-only late result; report any late write, ownership conflict, or material safety finding, mark the tree unstable when applicable, and require a new explicit session for follow-up work.
 - Trust the tree over a worker's changed-path report. Freeze conflicting dispatch and reconcile ownership on mismatch.
 
 ## Completion Standard
 
-While `ACTIVE`, finalize only when the latest requirement revision is addressed, no relevant user delta remains unprocessed, all requested slots are accounted for, queued and held work is resolved or explicitly handed back, authorized changes are audited or integrated, and important claims are verified. Then enter `STOPPING`, close workers, perform the final audit, and move to `OFF` only under the session-state rules.
+In one-shot scope, audit the bounded result, settle all controllable workers, report completion or blockers, and deactivate in that response without a close question.
 
-Return the final synthesis, close the session, and deactivate Relay Orchestra. Milestone updates do not deactivate it.
+While a live session is `ACTIVE`, form a completion candidate only when the latest requirement revision is addressed, no relevant user delta remains unprocessed, all requested slots are accounted for, queued and held work is resolved or explicitly handed back, authorized changes are audited or integrated, and important claims are verified. Perform the final audit, present the synthesis and residual risks, ask for close confirmation, and remain `ACTIVE` while awaiting the answer.
+
+Enter `STOPPING` only after valid direct confirmation or an explicit stop command. Complete the safe shutdown checks, return the final handoff, move to `OFF`, and deactivate Relay Orchestra. Milestone updates and completion candidates do not deactivate it.

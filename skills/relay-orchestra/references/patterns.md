@@ -66,4 +66,4 @@ Normalize results into confirmed consensus, meaningful disagreement, verified ev
 - Worktree creation without approval
 - Raw transcript forwarding
 - Completion based only on worker summaries
-- Permanent session activation
+- Implicit or always-on activation outside an explicitly opened live session

@@ -3,33 +3,35 @@
 ## One reviewer
 
 ```text
-Use Relay Orchestra for this request only. Run one isolated read-only reviewer.
+Use Relay Orchestra for this message only. Run one isolated read-only reviewer.
 ```
 
 ## Three lenses
 
 ```text
-$relay-orchestra run three read-only agents: regressions, architecture, and tests.
+Start a live $relay-orchestra session with three read-only agents: regressions,
+architecture, and tests.
 ```
 
 ## Fifteen agents
 
 ```text
-Use Relay Orchestra for this request only. Run fifteen focused reviewers,
+Start a live Relay Orchestra session with fifteen focused reviewers,
 using capacity waves if the client cannot run all fifteen simultaneously.
 ```
 
 ## Disjoint implementation
 
 ```text
-$relay-orchestra split this change among four writers with disjoint ownership.
+Start a live $relay-orchestra session and split this change among four writers.
 Use the shared tree and show the ownership map first.
 ```
 
 ## Worktree opt-in
 
 ```text
-Use Relay Orchestra. I approve one isolated worktree per concurrent writer.
+Start a live Relay Orchestra session. I approve one isolated worktree per
+concurrent writer.
 ```
 
 ## Stop

@@ -1,6 +1,6 @@
 # Live Session Control Loop
 
-Use this reference when the user changes requirements while agents are active, when capacity must be reallocated, or when several worker and user events arrive close together.
+Use this reference when the user changes requirements while agents are active, while close confirmation is pending, when capacity must be reallocated, or when several worker and user events arrive close together.
 
 ## Event Loop
 
@@ -9,9 +9,9 @@ Use this reference when the user changes requirements while agents are active, w
 3. Compare the delta with every active and queued work item.
 4. Preserve valid work, redirect invalid work, and record intentionally deferred ideas.
 5. Dispatch newly unblocked work up to capacity.
-6. Return a compact receipt and yield control instead of blocking on completion.
+6. Choose responsive yield, auto-wake yield, or one dependency wait under the rules below.
 
-Before the first yield, record whether skill instructions, the ledger, and agent handles each persist across turns. Use native continuity when all three do. If skill or ledger state does not persist, emit the compact session token and explicit `$relay-orchestra resume <token>:` continuation form defined in `SKILL.md`; if handles do not persist, settle every worker before yielding because the token cannot restore control.
+Before the first yield, record whether skill instructions, the ledger, and agent handles each persist across turns. Use native continuity when all three do. If skill or ledger state does not persist, emit the compact session token and require the client-specific explicit skill invocation plus the portable `resume <token>:` payload defined in `SKILL.md`; if handles do not persist, settle every worker before yielding because the token cannot restore control. On resume, reject older available token state. Treat an unexpectedly unavailable nonterminal handle as `unknown`, retain its exact count, and freeze repository operations and overlapping dispatch when it may still write.
 
 ## Route A User Delta
 
@@ -24,6 +24,7 @@ Before the first yield, record whether skill instructions, the ledger, and agent
 | Reordering only | Update affected implementer | Preserve other work |
 | Defer until later | Do not send yet | Put in HELD with unblock condition |
 | Remove requirement | Interrupt if still active | Mark work SUPERSEDED; retain useful evidence |
+| Related work, correction, or doubt while close confirmation is pending | Preserve audited evidence | Clear pending close confirmation, revise, and continue ACTIVE |
 | Stop session | Interrupt all controllable workers | Stop waves and begin safe shutdown |
 
 Use queued input when the current task remains valid and the delta can be applied afterward. Use interruption only when continuing would waste work, create conflicting changes, or violate the newest requirement.
@@ -50,16 +51,26 @@ Before accepting a result:
 
 When a user delta and worker result arrive together, route the user delta first. A result can then move dependent work from `HELD` to `QUEUED`, but it cannot erase the newer requirement or bypass an exact agent ceiling.
 
+A direct answer to the close question is provisional authorization, not a requirement delta. If it arrives with worker results or safety events, defer `ACTIVE -> STOPPING` until the delivery batch is drained. A material event clears the pending question and authorization; remain `ACTIVE` and re-audit before asking again.
+
 If research completes and the implementation direction is already authorized, synthesize it and launch the implementation wave without asking the user to repeat the request. Ask only for a genuinely missing product decision, authorization, or external dependency.
+
+## Present A Completion Candidate
+
+When the latest requirement revision appears complete, audit the integrated outcome while the session remains `ACTIVE`, then apply the [close-confirmation rules](../SKILL.md#request-close-confirmation). Related work, doubt, a revision change, or a material result clears the pending question and requires a fresh audit. When continuity needs a fallback token, carry the pending question and its audited revision in that token. Settling leaf handles for a bounded wave does not close the Relay session.
 
 ## Stay Responsive
 
-The coordinator is a control plane, not an extra background implementer. After dispatch, it should normally return control to the user with the current state. Avoid long waits, repeated polling, verbose status narration, and local work that duplicates or competes with delegated ownership.
+The coordinator is a control plane, not an extra background implementer. Check result delivery and notification-triggered auto-wake separately; a queued notification may not start a coordinator turn.
+
+- With auto-wake, dispatch non-blocking work and yield.
+- Without auto-wake, normally yield and disclose once that synthesis resumes on the next user or manual wake.
+- A request for a completion candidate without another user or manual wake does not authorize blocking. When worker results are a strict dependency, offer one native wait and invoke it only after the user explicitly opts in to that blocking wait. State the shortest practical bounded timeout and disclose that the main turn stays `In Progress` and may delay new input. Never use shell sleep, busy-poll, loop waits, or immediately re-wait after a timeout; report the still-running state, return control, and require fresh opt-in before another wait.
 
 When the user sends a new message, acknowledge what changed before reporting old progress. Never answer “wait for the agents” when the new instruction can be accepted, queued, or routed immediately.
 
 ## Stop And Late Results
 
-Shutdown is `ACTIVE -> STOPPING -> OFF`. In `STOPPING`, dispatch is frozen but results are still processed for shutdown and shared-tree writes are audited. Stay `STOPPING` while an uncontrollable shared writer is live unless the user explicitly accepts hand-back with the tree marked unstable.
+Shutdown is `ACTIVE -> STOPPING -> OFF`. Enter `STOPPING` after a user-authored direct explicit stop while `ACTIVE` or a valid later-turn answer to the pending close question. In `STOPPING`, dispatch is frozen but results are still processed and shared-tree writes are audited. Close confirmation or stop does not accept an unstable hand-back. If an uncontrollable writer remains live, disclose the risk, ask a distinct question, prohibit repository operations, and stay `STOPPING` until a later user-authored direct acceptance. Move to `OFF` only after all controllable workers are closed.
 
 After `OFF`, an ordinary late read-only result does not reopen the session. Report late writes, ownership conflicts, or material safety findings as exceptions; do not integrate or dispatch follow-up work without a new explicit activation.

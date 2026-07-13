@@ -18,11 +18,11 @@
 
 ---
 
-Relay Orchestra is a run-scoped multi-agent orchestration skill for large, cross-cutting work. It coordinates your client's built-in agents across a live multi-turn session, assigns focused workstreams, and combines them into one verified result while you keep steering.
+Relay Orchestra is an explicit multi-agent orchestration skill for large, cross-cutting work. It coordinates your client's built-in agents, assigns focused workstreams, and combines them into one verified result in either a one-shot request or a live multi-turn session.
 
 Use it for market or competitor research, large codebase audits, module or multi-module implementation, migrations, and cross-cutting reviews. Clients without live parallel support fall back honestly to bounded waves, sequential work, or dispatch-ready briefs.
 
-It stays active only for the current task and does not silently apply itself to later work.
+A live session stays active across related follow-ups, even after the objective appears complete. It enters shutdown only after a later direct answer to its current close question or an explicit stop command. An explicit one-shot invocation ends in the same response without a close question or cross-turn persistence.
 
 ## Quick Start
 
@@ -38,16 +38,24 @@ The CLI detects supported agents and installs for the project in your current di
 
 ### Invoke It
 
-Use your client's explicit skill picker or command when available (`$relay-orchestra` in Codex), or use this portable request:
+These examples use Codex's `$relay-orchestra` syntax; in other clients, use their explicit skill picker or command with the wording after that prefix. A bare explicit invocation defaults to a live session:
 
 ```text
-Use the Relay Orchestra skill for this request only. Run three read-only agents
-to review the current changes, then verify and synthesize their findings.
+$relay-orchestra Start a live Relay Orchestra session. Run three read-only agents to review the
+current changes, then verify and synthesize their findings while I keep steering.
 ```
+
+For bounded work that must not persist:
+
+```text
+$relay-orchestra For this message only, run two reviewers and synthesize once.
+```
+
+If native agents are unavailable, a live session offers sequential fallback instead of applying it silently.
 
 > **Usage warning:** Every delegated agent run performs separate model work, whether concurrent or sequential, so token or credit use can rise quickly. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
 
-On clients with full live support, a successful start returns a short receipt while work continues; other clients disclose their bounded-wave fallback:
+With cross-turn background support, a successful live-session start can return this short receipt while work continues:
 
 ```text
 NOW: three reviewers active
@@ -68,32 +76,33 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 
 ## What It Does
 
-- **Keeps the conversation live.** Dispatch returns promptly so you can keep steering.
+- **Keeps the conversation live.** Relay distinguishes queued results from automatic wake and defaults to a disclosed user/manual wake when auto-wake is absent.
 - **Accepts changes mid-run.** Add, revise, reprioritize, hold, or cancel work while agents are active.
 - **Uses native agents.** Relay Orchestra delegates through the host client instead of launching external agent CLIs.
-- **Schedules to capacity.** Request any positive number of agents; the coordinator uses waves when the client has fewer slots.
-- **Coordinates and verifies.** It assigns ownership, tracks dependencies, and checks worker reports before finalizing.
+- **Schedules to capacity.** Request any positive number of agents; Relay accounts for every slot and uses waves in live sessions when the client has fewer slots.
+- **Coordinates and verifies.** It assigns ownership, tracks dependencies, audits the outcome, and asks before closing the session.
 
 ## How a Live Session Works
 
 ```mermaid
 flowchart TD
     accTitle: Relay Orchestra live session
-    accDescr: A user directs Relay Orchestra, which dispatches native agents, synthesizes their work, and returns the result.
-    U["You: start or revise the task"]
-    U --> C["Relay Orchestra: acknowledge and dispatch"]
-    C --> A["Native agents: work in parallel"]
-    A --> S["Relay Orchestra: synthesize or redirect"]
-    S --> O["You: receive the result or add instructions"]
+    accDescr: A user directs Relay Orchestra, which dispatches native agents, audits their work, and asks whether to close or continue.
+    U["You:<br/>start or revise the task"]
+    U --> C["Relay Orchestra:<br/>acknowledge and dispatch"]
+    C --> A["Native agents:<br/>work in parallel"]
+    A --> S["Relay Orchestra:<br/>synthesize and audit"]
+    S --> Q["Relay Orchestra:<br/>present result and ask to close"]
+    Q --> O["You:<br/>close or continue"]
 ```
 
-You remain the source of truth. New instructions take priority over planned follow-up work and incoming results.
+You remain the source of truth. New instructions take priority over planned follow-up work and incoming results. Apparent completion leaves the session active: Relay Orchestra presents what is complete and any residual risks, then asks whether it may close. A direct affirmative answer begins safe shutdown; new related work or doubt cancels the pending close and continues the same session.
 
 <details>
 <summary><strong>Realistic multi-turn example</strong></summary>
 
 ```text
-You: Use Relay Orchestra for this request only. Improve the recipe import flow.
+You: Start a live Relay Orchestra session. Improve the recipe import flow.
 Start two researchers, then have one implementer use their findings.
 
 Relay Orchestra: Working without worktree isolation. Agents share the current
@@ -141,11 +150,15 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Agent Skills | Required for normal discovery and invocation. |
 | Native subagents | Enables parallel delegation; otherwise Relay Orchestra offers sequential work or dispatch-ready briefs. |
 | Background work across turns | Enables a continuous live session; otherwise work runs in short, disclosed waves. |
+| Result notifications | Delivery is checked separately from whether a notification starts a coordinator turn. |
+| Automatic coordinator wake | Enables autonomous synthesis after yield; otherwise Relay uses a disclosed user/manual wake or one explicit dependency wait. |
 | Lifecycle controls | Follow-up, interruption, and closure vary by client and version. |
 | Concurrency | The host sets practical limits; Relay Orchestra schedules within them. |
 | Worktrees | Never assumed and always require explicit approval. |
 
-See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is a run-scoped coordinator, not an always-on automation framework.
+Without auto-wake, a live session blocks on a native wait only after you explicitly opt in to that wait. Relay states the shortest practical bounded timeout first and warns that the coordinator turn stays **In Progress** and may delay new input. The only consent exception is an explicitly chosen one-shot whose response strictly depends on worker results; it may wait at most once with the same warning. Relay never sleeps, busy-polls, loops waits, or reflexively re-waits after a timeout.
+
+See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is an explicitly scoped coordinator, not an always-on automation framework.
 
 ## Documentation
 
@@ -154,7 +167,3 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 - [Coordination patterns](skills/relay-orchestra/references/patterns.md)
 - [Prompt examples](examples/prompts.md)
 - [Contributing](CONTRIBUTING.md)
-
-## License
-
-[MIT](LICENSE)

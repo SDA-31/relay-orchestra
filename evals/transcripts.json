@@ -1,52 +1,212 @@
 [
   {
     "id": "native_dispatch_yield_second_turn",
-    "capabilities": {
-      "skill_instructions_persist": true,
-      "ledger_persists": true,
-      "agent_handles_persist": true
-    },
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Explicitly activate with exactly two agents.", "expect": ["ACTIVE", "EXACT_2"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch shared read-only workers A and B, send a compact receipt, and yield.", "expect": ["dispatch", "shared_announcement", "responsive_yield", "native_continuity"]},
-      {"turn": 2, "event": "delivery_batch", "detail": "A worker result and the second user turn arrive together.", "inputs": [{"kind": "worker_result", "source": "A", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Queue a compatible change for B and hold accessibility review until A completes."}], "expect": ["user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2"]},
+      {"turn": 1, "event": "user", "detail": "Explicitly start a live session with exactly two agents.", "expect": ["live_scope", "OFF_to_ACTIVE", "EXACT_2"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch workers, disclose that queued results resume on the next user or manual wake, and yield responsively.", "expect": ["dispatch", "shared_announcement", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "disclose_next_user_or_manual_wake", "responsive_yield", "no_shell_sleep", "no_busy_poll", "native_continuity"]},
+      {"turn": 2, "event": "delivery_batch", "detail": "A worker result and a newer user delta arrive together.", "inputs": [{"kind": "worker_result", "source": "A", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Queue a compatible change for B and hold accessibility review until A completes."}], "expect": ["user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2"]},
       {"turn": 2, "event": "coordinator", "detail": "Route the new requirement, then process A's result and yield again.", "expect": ["revision_increment", "same_turn_receipt", "ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   },
   {
+    "id": "auto_wake_dispatch_resumes_coordinator",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": true},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch non-blocking work and yield because the host confirms notification-triggered coordinator wake.", "expect": ["dispatch_nonblocking", "result_notifications", "notification_auto_wake", "yield_main_turn", "ACTIVE"]},
+      {"turn": 2, "event": "notification_wake", "detail": "A worker result notification starts a new coordinator turn.", "expect": ["auto_wake_started_coordinator_turn", "worker_result_delivered", "ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Process the result and continue the active live session.", "expect": ["autonomous_synthesis_after_wake", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "explicit_completion_candidate_wait_requires_opt_in",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Reach a completion candidate without another message even though queued notifications do not wake the coordinator.", "expect": ["completion_candidate_required"]},
+      {"turn": 1, "event": "coordinator", "detail": "Explain the default user/manual wake, disclose one blocking wait's responsiveness cost and bounded timeout, ask for explicit opt-in, and yield without waiting.", "expect": ["blocking_wait_opt_in_required", "no_wait_before_opt_in", "bounded_timeout_offer", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "disclose_next_user_or_manual_wake", "responsive_yield", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "I explicitly opt in to one native blocking wait with the offered bound.", "expect": ["explicit_blocking_wait_opt_in", "bounded_timeout_acknowledged"]},
+      {"turn": 2, "event": "coordinator", "detail": "Issue one bounded native wait because the next action strictly depends on worker results.", "expect": ["single_native_wait", "strict_dependency_wait", "bounded_timeout", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "no_shell_sleep", "no_busy_poll", "no_wait_loop", "no_repeated_wait"]},
+      {"turn": 2, "event": "wait_timeout", "detail": "The native wait times out while workers remain active.", "expect": ["wait_timeout_returns_control", "still_running_state_reported", "no_immediate_rewait", "fresh_opt_in_required_for_later_wait", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "explicit_one_shot_bounded_completion",
+    "scope": "one_shot",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra for this message only and run two reviewers.", "expect": ["one_shot_scope"]},
+      {"turn": 1, "event": "coordinator", "detail": "Disclose the bounded wait and input delay, run one bounded wave and one native wait because this response strictly depends on both results, then audit, close workers, report, and deactivate.", "expect": ["bounded_wave", "single_native_bounded_wait", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "no_shell_sleep", "no_busy_poll", "no_wait_loop", "no_repeated_wait", "no_later_user_wake_dependency", "no_cross_turn_persistence", "controllable_workers_closed", "one_shot_complete", "no_close_question", "same_turn_deactivation", "OFF"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "one_shot_blocked_handoff",
+    "scope": "one_shot",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra one time for an action requiring unavailable authorization.", "expect": ["one_shot_scope"]},
+      {"turn": 1, "event": "coordinator", "detail": "Report what could not be completed, close any controllable worker, and deactivate without asking to close.", "expect": ["capability_or_authorization_blocked", "clear_incomplete_handoff", "no_cross_turn_persistence", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
     "id": "stop_during_shared_write_and_late_result",
-    "capabilities": {
-      "skill_instructions_persist": true,
-      "ledger_persists": true,
-      "agent_handles_persist": true
-    },
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "A shared-tree writer is active.", "expect": ["shared_writer_live"]},
       {"turn": 2, "event": "user", "detail": "Stop Relay Orchestra now.", "expect": ["stop_requested"]},
-      {"turn": 2, "event": "coordinator", "detail": "Enter STOPPING, freeze dispatch, attempt interruption, and find the writer uncontrollable.", "expect": ["ACTIVE_to_STOPPING", "tree_unstable", "repository_operations_prohibited", "remain_STOPPING"]},
-      {"turn": 3, "event": "user", "detail": "I explicitly accept hand-back of the unstable tree.", "expect": ["accept_unstable_handback"]},
-      {"turn": 3, "event": "coordinator", "detail": "Report the live writer and hand back without a final-audit claim.", "expect": ["STOPPING_to_OFF", "unstable_handoff"]},
+      {"turn": 2, "event": "coordinator", "detail": "Enter STOPPING, freeze dispatch, find the writer uncontrollable, disclose the risk, and ask a distinct hand-back question.", "expect": ["ACTIVE_to_STOPPING", "tree_unstable", "repository_operations_prohibited", "risk_disclosed", "unstable_handback_required", "remain_STOPPING"]},
+      {"turn": 3, "event": "user", "detail": "I directly accept hand-back of the unstable tree.", "expect": ["accept_unstable_handback"]},
+      {"turn": 3, "event": "coordinator", "detail": "Confirm every controllable worker is closed and hand back without a final-audit claim.", "expect": ["controllable_workers_closed", "STOPPING_to_OFF", "unstable_handoff"]},
       {"turn": 4, "event": "worker_result", "detail": "The late worker reports additional writes.", "expect": ["report_late_write", "do_not_reopen", "new_activation_required"]}
     ],
     "final_state": "OFF"
   },
   {
     "id": "persistence_fallback_rehydration",
-    "capabilities": {
-      "skill_instructions_persist": false,
-      "ledger_persists": false,
-      "agent_handles_persist": false
-    },
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Explicitly activate a multi-turn research session.", "expect": ["ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Disclose missing persistence, run a bounded wave, settle all handles, and emit a compact non-secret session token.", "expect": ["persistence_disclosure", "bounded_wave", "no_live_handle_at_yield", "session_token"]},
-      {"turn": 1, "event": "yield", "detail": "Return control after the bounded wave.", "expect": ["responsive_yield"]},
-      {"turn": 2, "event": "user", "detail": "Explicitly invoke `$relay-orchestra resume <token>:` before the related instruction.", "expect": ["explicit_skill_resume", "token_prefix"]},
-      {"turn": 2, "event": "coordinator", "detail": "Reload instructions, rehydrate the compact ledger, create only newly controllable workers, and issue the next explicit resume token.", "expect": ["rehydrate", "no_claim_of_handle_recovery", "session_token", "ACTIVE"]}
+      {"turn": 1, "event": "user", "detail": "Explicitly activate a multi-turn research session.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Run a bounded wave, settle all handles, and emit a compact token with a portable resume payload.", "expect": ["persistence_disclosure", "bounded_wave", "no_live_handle_at_yield", "session_token", "portable_resume_payload"]},
+      {"turn": 1, "event": "yield", "detail": "Return control after the bounded wave.", "expect": ["yield_main_turn"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly invoke the skill with the client's mechanism and include resume token plus the next instruction.", "expect": ["explicit_skill_resume", "portable_resume_payload"]},
+      {"turn": 2, "event": "coordinator", "detail": "Rehydrate compact state, settle the next bounded wave, and issue the next token.", "expect": ["rehydrate", "no_claim_of_handle_recovery", "bounded_wave", "no_live_handle_at_yield", "session_token", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "bare_explicit_invocation_defaults_live_and_requires_later_close",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "$relay-orchestra run one reviewer.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch the reviewer, disclose that synthesis resumes on the next user or manual wake, and keep the live session active.", "expect": ["dispatch", "shared_announcement", "responsive_session", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "disclose_next_user_or_manual_wake", "responsive_yield", "no_shell_sleep", "no_busy_poll", "ACTIVE"]},
+      {"turn": 2, "event": "worker_result", "detail": "The reviewer completes and the result is ready for final audit.", "expect": ["completion_criteria_candidate", "ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Audit, present the completion candidate and residual risks, ask to close, and remain active.", "expect": ["final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "later_close_confirmation_required", "remain_ACTIVE"]},
+      {"turn": 3, "event": "user", "detail": "Yes, close Relay Orchestra.", "expect": ["direct_close_confirmation", "close_confirmation_revision_match"]},
+      {"turn": 3, "event": "coordinator", "detail": "Consume the later direct answer and begin safe shutdown.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING", "freeze_dispatch"]},
+      {"turn": 3, "event": "coordinator", "detail": "Close controllable workers, confirm shared-tree writers are terminal, and deactivate.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF", "OFF"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "new_work_cancels_pending_close",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Actually, correct the installation example before we finish.", "expect": ["related_work_while_close_pending", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Record the new revision and route the correction without shutdown.", "expect": ["revision_increment", "dispatch_or_queue", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "close_confirmation_requires_separate_unstable_acceptance",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Yes, close it.", "expect": ["direct_close_confirmation", "close_confirmation_revision_match"]},
+      {"turn": 2, "event": "coordinator", "detail": "Enter STOPPING, discover an uncontrollable writer, disclose the risk, and ask a distinct hand-back question.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING", "tree_unstable", "repository_operations_prohibited", "risk_disclosed", "unstable_handback_required", "close_confirmation_not_reused", "remain_STOPPING"]},
+      {"turn": 3, "event": "user", "detail": "I directly accept unstable hand-back with the writer still live.", "expect": ["accept_unstable_handback"]},
+      {"turn": 3, "event": "coordinator", "detail": "Close every controllable worker and hand back the unstable tree.", "expect": ["controllable_workers_closed", "STOPPING_to_OFF", "unstable_handoff"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "pending_close_confirmation_fallback",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Settle leaf handles, present the audited completion candidate, ask to close, and emit a revision-bound token.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_live_handle_at_yield", "session_token", "pending_close_and_audited_revision_in_token"]},
+      {"turn": 1, "event": "yield", "detail": "Return control while Relay remains active.", "expect": ["yield_main_turn", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly invoke the skill and include resume token with all good.", "expect": ["explicit_skill_resume", "portable_resume_payload", "rehydrate_pending_close", "direct_close_confirmation", "close_confirmation_revision_match"]},
+      {"turn": 2, "event": "coordinator", "detail": "Rehydrate the current pending question and enter shutdown.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING"]},
+      {"turn": 2, "event": "coordinator", "detail": "Verify all controllable workers are closed and no writer remains live.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "fallback_approval_is_not_close_confirmation",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Explicitly activate Relay Orchestra for a read-only inspection.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Subagents are unavailable; ask permission for sequential read-only fallback.", "expect": ["no_subagents", "fallback_authorization_question", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Yes, perform the same inspection sequentially and read-only.", "expect": ["fallback_work_authorized", "non_close_answer", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Perform and audit the fallback, report a completion candidate, and end with the close question.", "expect": ["sequential_fallback", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_same_turn_shutdown"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "stale_close_confirmation_is_rejected",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Correct the documented default before closing.", "expect": ["related_work_while_close_pending", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Advance the requirement revision and route the correction.", "expect": ["revision_increment", "dispatch_or_queue", "ACTIVE"]},
+      {"turn": 3, "event": "user", "detail": "A delayed answer to the old question arrives: Yes, thanks.", "expect": ["stale_close_confirmation", "no_closure_authorization", "fresh_audit_and_question_required", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "close_confirmation_races_material_result",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "delivery_batch", "detail": "A direct yes and a delayed material result arrive together.", "inputs": [{"kind": "user", "detail": "Yes, close it."}, {"kind": "worker_result", "source": "reviewer", "detail": "A required check used the wrong fixture and remains unverified."}], "expect": ["provisional_close_authorization", "drain_delivery_batch_before_STOPPING", "audit_result_before_transition", "material_result_invalidates_close", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE", "no_ACTIVE_to_STOPPING"]},
+      {"turn": 2, "event": "coordinator", "detail": "Advance the revision, route follow-up work, and continue.", "expect": ["revision_increment", "route_followup", "same_turn_receipt", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "ambiguous_and_mixed_replies_stay_active",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Probably, if the checks are fine.", "expect": ["ambiguous_or_conditional_close_reply", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Ask a close-specific clarification as the replacement pending question.", "expect": ["replace_pending_close_question", "same_audited_revision", "remain_ACTIVE"]},
+      {"turn": 3, "event": "user", "detail": "Yes, close it, but fix the example first.", "expect": ["mixed_assent_plus_new_work", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 3, "event": "coordinator", "detail": "Advance the revision and route the new work.", "expect": ["revision_increment", "dispatch_or_queue", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "unexpected_lost_writer_handle_remains_significant",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Emit a token recording an open shared-tree writer and exact used-handle count.", "expect": ["session_token", "portable_resume_payload", "nonterminal_handle_recorded", "exact_used_handle_accounting"]},
+      {"turn": 1, "event": "yield", "detail": "Yield expecting the native handle to persist.", "expect": ["yield_main_turn"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly resume with the token.", "expect": ["explicit_skill_resume", "portable_resume_payload"]},
+      {"turn": 2, "event": "coordinator", "detail": "The writer handle is unavailable; retain its count and freeze unsafe tree work.", "expect": ["rehydrate", "handle_lifecycle_unknown", "retain_exact_accounting", "tree_unstable", "repository_operations_prohibited", "freeze_overlapping_writer_dispatch", "no_replacement_past_EXACT_ceiling", "remain_ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   }
