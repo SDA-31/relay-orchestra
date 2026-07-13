@@ -34,7 +34,7 @@ npx skills add SDA-31/relay-orchestra
 
 The CLI detects supported agents and installs for the project in your current directory by default; add `-g` for a user-level installation.
 
-[View it on skills.sh](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra), or see [Installation](INSTALL.md) for standalone scripts, pinned revisions, exact paths, and custom destinations. Start a new task or chat afterward if your client caches its skill catalog.
+[View it on skills.sh](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra), or see [Installation](INSTALL.md) for standalone scripts, pinned revisions, exact paths, and custom destinations. After an update, an active task may retain the skill instructions it already loaded. Start a new task or chat before relying on updated instructions. If cached content remains, use the client's documented refresh or restart procedure.
 
 ### Invoke It
 
@@ -53,7 +53,8 @@ $relay-orchestra For this message only, run two reviewers and synthesize once.
 
 If native agents are unavailable, a live session offers sequential fallback instead of applying it silently.
 
-> **Usage warning:** Every delegated agent run performs separate model work, whether concurrent or sequential, so token or credit use can rise quickly. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
+> [!WARNING]
+> Delegated agents perform separate model work, whether concurrent or sequential, so tokens or credits can be consumed quickly. Start with the fewest agents that provide distinct value.
 
 With cross-turn background support, a successful live-session start can return this short receipt while work continues:
 

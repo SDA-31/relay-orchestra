@@ -16,7 +16,7 @@ The CLI discovers the `relay-orchestra` skill, detects supported agents, and ins
 npx skills update relay-orchestra
 ```
 
-See the [skills.sh listing](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra) for discovery. After installation, start a new task or chat if the client caches its skill catalog.
+See the [skills.sh listing](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra) for discovery. Start a new task or chat before relying on updated instructions. If cached content remains, use the client's documented refresh or restart procedure.
 
 ## Standalone Script Installation
 
@@ -110,6 +110,8 @@ For Windows, run the remote installer as a script block so arguments are forward
 ```
 
 The installer uses a staged replacement beside the current destination, with rollback to the previous installation on failure.
+
+An active task may retain Relay instructions loaded before the update. Start a new task or chat before relying on updated instructions. If cached content remains, use the client's documented refresh or restart procedure. An update does not hot-reload instructions already held by an active task.
 
 ## Inspect Before Running
 
@@ -205,7 +207,7 @@ The Codex target honors `CODEX_HOME` when set. Otherwise it uses `~/.codex`. The
 
 ### The client does not discover the skill
 
-Start a new task or chat, then confirm the printed destination is one the client scans. Consult the [platform capability notes](skills/relay-orchestra/references/platforms.md) because discovery behavior varies by client and version.
+Start a new task or chat before relying on updated instructions. If cached content remains, use the client's documented refresh or restart procedure. Then confirm the printed destination is one the client scans. Consult the [platform capability notes](skills/relay-orchestra/references/platforms.md) because discovery behavior varies by client and version.
 
 ### Remote link mode fails
 

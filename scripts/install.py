@@ -235,7 +235,9 @@ def emit(results: list[dict[str, str]], args: argparse.Namespace) -> None:
     for result in results:
         print(f"- {result['target']}: {result['path']} ({result['status']}, {result['mode']})")
     if not args.dry_run:
-        print("Start a new task or chat if your client caches its skill catalog.")
+        print("Active tasks may retain Relay instructions loaded before this install or update.")
+        print("Start a new task or chat before relying on updated instructions.")
+        print("If cached content remains, use the client's documented refresh or restart procedure.")
 
 
 def main() -> int:

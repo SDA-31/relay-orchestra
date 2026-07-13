@@ -147,9 +147,9 @@
     "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
     "initial_state": "ACTIVE",
     "steps": [
-      {"turn": 1, "event": "coordinator", "detail": "Settle leaf handles, present the audited completion candidate, ask to close, and emit a revision-bound token.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_live_handle_at_yield", "session_token", "pending_close_and_audited_revision_in_token"]},
+      {"turn": 1, "event": "coordinator", "detail": "Settle leaf handles, present the audited completion candidate, ask to close, and emit a revision-bound token.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_live_handle_at_yield", "session_token", "portable_resume_payload", "ledger_generation_in_token", "pending_close_and_audited_revision_in_token"]},
       {"turn": 1, "event": "yield", "detail": "Return control while Relay remains active.", "expect": ["yield_main_turn", "remain_ACTIVE"]},
-      {"turn": 2, "event": "user", "detail": "Explicitly invoke the skill and include resume token with all good.", "expect": ["explicit_skill_resume", "portable_resume_payload", "rehydrate_pending_close", "direct_close_confirmation", "close_confirmation_revision_match"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly invoke the skill and include the supplied resume token with all good.", "expect": ["explicit_skill_resume", "portable_resume_payload", "structurally_valid_session_token", "token_accepted_as_supplied_state", "relative_staleness_not_independently_proven", "no_comparison_to_lost_state", "rehydrate_pending_close", "direct_close_confirmation", "close_confirmation_revision_match"]},
       {"turn": 2, "event": "coordinator", "detail": "Rehydrate the current pending question and enter shutdown.", "expect": ["confirmation_authorizes_STOPPING", "ACTIVE_to_STOPPING"]},
       {"turn": 2, "event": "coordinator", "detail": "Verify all controllable workers are closed and no writer remains live.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF"]}
     ],
@@ -201,7 +201,7 @@
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
       {"turn": 2, "event": "user", "detail": "Probably, if the checks are fine.", "expect": ["ambiguous_or_conditional_close_reply", "no_closure_authorization", "remain_ACTIVE"]},
-      {"turn": 2, "event": "coordinator", "detail": "Ask a close-specific clarification as the replacement pending question.", "expect": ["replace_pending_close_question", "same_audited_revision", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Retain the same pending close question without issuing another question.", "expect": ["retain_pending_close_question", "pending_close_identity_preserved", "no_duplicate_completion_candidate", "no_duplicate_close_question", "remain_ACTIVE"]},
       {"turn": 3, "event": "user", "detail": "Yes, close it, but fix the example first.", "expect": ["mixed_assent_plus_new_work", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE"]},
       {"turn": 3, "event": "coordinator", "detail": "Advance the revision and route the new work.", "expect": ["revision_increment", "dispatch_or_queue", "ACTIVE"]}
     ],
@@ -214,10 +214,163 @@
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly request a one-off yield until I return while the shared-tree writer remains active.", "expect": ["explicit_pause_or_yield", "ordinary_one_off_instruction"]},
-      {"turn": 1, "event": "coordinator", "detail": "Honor the one-off yield and emit a token recording the open writer and exact used-handle count.", "expect": ["one_off_yield_honored", "no_mode", "no_option", "no_scope", "no_toggle", "no_persistent_policy", "session_token", "portable_resume_payload", "nonterminal_handle_recorded", "exact_used_handle_accounting"]},
+      {"turn": 1, "event": "coordinator", "detail": "Honor the one-off yield and emit a token recording the open writer and exact used-handle count.", "expect": ["one_off_yield_honored", "no_mode", "no_option", "no_scope", "no_toggle", "no_persistent_policy", "session_token", "portable_resume_payload", "ledger_generation_in_token", "nonterminal_handle_recorded", "exact_used_handle_accounting"]},
       {"turn": 1, "event": "yield", "detail": "Yield expecting the native handle to persist.", "expect": ["yield_main_turn"]},
-      {"turn": 2, "event": "user", "detail": "Explicitly resume with the token.", "expect": ["explicit_skill_resume", "portable_resume_payload"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly activate Relay and resume with the supplied token.", "expect": ["explicit_skill_resume", "portable_resume_payload", "structurally_valid_session_token", "token_accepted_as_supplied_state", "relative_staleness_not_independently_proven", "no_comparison_to_lost_state"]},
       {"turn": 2, "event": "coordinator", "detail": "The writer handle is unavailable; retain its count and freeze unsafe tree work.", "expect": ["rehydrate", "handle_lifecycle_unknown", "retain_exact_accounting", "tree_unstable", "repository_operations_prohibited", "freeze_overlapping_writer_dispatch", "no_replacement_past_EXACT_ceiling", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "historical_normal_completion_remains_active",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "worker_result", "detail": "The historical read-only research wave finishes normally.", "expect": ["historical_normal_completion", "worker_result_delivered", "ACTIVE"]},
+      {"turn": 1, "event": "host_final", "detail": "Report the result as a completion candidate instead of declaring the live session closed.", "expect": ["historical_normal_completion", "final_answer_boundary", "lifecycle_neutral", "native_continuity_verified", "no_self_close", "no_closure_authorization", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "host_final_and_task_complete_preserve_active",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "host_final", "detail": "The host labels a normal live-session status response final_answer.", "expect": ["final_answer_boundary", "lifecycle_neutral", "native_continuity_verified", "no_closure_authorization", "preserve_ACTIVE", "remain_ACTIVE"]},
+      {"turn": 1, "event": "task_complete", "detail": "The host emits task_complete for the coordinator turn.", "expect": ["task_complete_boundary", "lifecycle_neutral", "native_continuity_verified", "no_closure_authorization", "preserve_ACTIVE", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Continue with a related correction without invoking Relay again.", "expect": ["related_followup", "no_new_activation"]},
+      {"turn": 2, "event": "coordinator", "detail": "Route the correction in the existing session.", "expect": ["revision_increment", "route_followup", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "compaction_preserves_active_session",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Persistence is unverified, so treat it as unavailable and emit a compact token before returning control.", "expect": ["persistence_unverified", "treat_unverified_persistence_as_unavailable", "session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "preserve_state_scope_ledger_accounting", "remain_ACTIVE"]},
+      {"turn": 1, "event": "compaction", "detail": "The host compacts the active task context; lifecycle state is unchanged but executable work stays frozen.", "expect": ["compaction_boundary", "lifecycle_neutral", "preserve_state_scope_ledger_accounting", "continuation_requires_explicit_resume", "freeze_dispatch_and_writes", "no_restoration_claim", "never_infer_OFF", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly activate Relay and resume with the supplied token.", "expect": ["explicit_skill_resume", "portable_resume_payload", "structurally_valid_session_token", "token_accepted_as_supplied_state", "relative_staleness_not_independently_proven", "no_comparison_to_lost_state"]},
+      {"turn": 2, "event": "coordinator", "detail": "Structurally validate and rehydrate the supplied token, then continue the same ACTIVE session.", "expect": ["rehydrate", "no_new_activation", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "compaction_without_continuity_freezes_work",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "compaction", "detail": "The host compacts context before verified native state or a portable token is available.", "expect": ["compaction_boundary", "lifecycle_neutral", "continuity_loss", "freeze_dispatch_and_writes", "continuity_loss_disclosed", "no_restoration_claim", "never_infer_OFF", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "stale_token_after_revision_is_rejected",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Issue a token for the current ACTIVE revision with no live handles.", "expect": ["session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "A material result advances the requirement revision and invalidates the earlier token.", "expect": ["revision_increment", "route_followup", "ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly activate Relay with the older token.", "expect": ["explicit_skill_resume", "portable_resume_payload", "stale_session_token", "token_ledger_generation_mismatch", "newer_generation_comparator_survives", "stale_token_rejected", "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "stale_token_after_ledger_generation_change",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Issue a token carrying the current ledger generation with no live handles.", "expect": ["session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Handle accounting, tree stability, and queued work change without changing the requirement revision.", "expect": ["ledger_generation_increment", "handle_accounting_changed", "tree_stability_changed", "queued_or_held_work_changed", "ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly activate Relay with the older-generation token.", "expect": ["explicit_skill_resume", "portable_resume_payload", "stale_session_token", "token_ledger_generation_mismatch", "newer_generation_comparator_survives", "stale_token_rejected", "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "non_native_host_final_then_task_complete_resumes",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "host_final", "detail": "Create the completion candidate and replacement token before evaluating this non-native final boundary.", "expect": ["final_answer_boundary", "lifecycle_neutral", "post_response_boundary_freshness", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "session_token", "portable_resume_payload", "ledger_generation_in_token", "pending_close_and_audited_revision_in_token", "no_live_handle_at_yield", "continuation_requires_explicit_resume", "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"]},
+      {"turn": 1, "event": "task_complete", "detail": "Record host bookkeeping while execution remains frozen pending explicit resume.", "expect": ["task_complete_boundary", "lifecycle_neutral", "host_bookkeeping_only", "execution_frozen", "continuation_requires_explicit_resume", "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Explicitly activate Relay with the supplied token and retain the pending close question.", "expect": ["explicit_skill_resume", "portable_resume_payload", "structurally_valid_session_token", "token_accepted_as_supplied_state", "relative_staleness_not_independently_proven", "no_comparison_to_lost_state", "rehydrate_pending_close"]},
+      {"turn": 2, "event": "coordinator", "detail": "Rehydrate the pending question without opening a new session.", "expect": ["rehydrate", "no_new_activation", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "native_continuity_with_zero_handles",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "host_final", "detail": "The host ends a status response with no nonterminal handles in the ledger.", "expect": ["final_answer_boundary", "lifecycle_neutral", "zero_nonterminal_handles", "handle_continuity_vacuously_satisfied", "native_continuity_verified", "no_session_token", "no_closure_authorization", "preserve_ACTIVE", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "reinvocation_while_active_is_a_delta",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 2, "event": "user", "detail": "Invoke Relay Orchestra again while ACTIVE and add a worktree requirement.", "expect": ["reinvoke_while_ACTIVE", "preserve_state_scope_ledger_accounting", "accompanying_text_is_delta", "no_new_activation", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Preserve the current session and route the accompanying requirement.", "expect": ["revision_increment", "route_followup", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "reinvocation_while_stopping_preserves_shutdown",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "STOPPING",
+    "steps": [
+      {"turn": 2, "event": "user", "detail": "Invoke Relay Orchestra again while STOPPING and request a new audit.", "expect": ["reinvoke_while_STOPPING", "preserve_shutdown", "no_new_work_absorbed", "hand_back_after_OFF", "no_new_activation", "remain_STOPPING"]},
+      {"turn": 2, "event": "coordinator", "detail": "Continue safe shutdown without dispatching the new audit.", "expect": ["freeze_dispatch", "remain_STOPPING"]}
+    ],
+    "final_state": "STOPPING"
+  },
+  {
+    "id": "pending_close_question_is_not_duplicated",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Completion is reported again while the same close question remains unanswered.", "expect": ["retain_pending_close_question", "pending_close_identity_preserved", "no_duplicate_completion_candidate", "no_duplicate_close_question", "remain_ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "workstream_stop_does_not_stop_relay",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 2, "event": "user", "detail": "Stop the calendar workstream but keep reviewing the rest.", "expect": ["work_item_stop", "no_session_stop_authorization", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Interrupt only the affected work and keep Relay active.", "expect": ["interrupt_affected_work", "preserve_unaffected_work", "same_turn_receipt", "ACTIVE"]},
+      {"turn": 3, "event": "user", "detail": "Stop Relay Orchestra now.", "expect": ["stop_requested", "explicit_session_stop_still_supported"]},
+      {"turn": 3, "event": "coordinator", "detail": "Consume the session-targeted stop and enter safe shutdown.", "expect": ["ACTIVE_to_STOPPING", "freeze_dispatch"]},
+      {"turn": 3, "event": "coordinator", "detail": "Close controllable workers, confirm writers are terminal, and deactivate.", "expect": ["controllable_workers_closed", "terminal_writers_confirmed", "STOPPING_to_OFF", "OFF"]}
+    ],
+    "final_state": "OFF"
+  },
+  {
+    "id": "local_phase_rechecks_delegation",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Handle an immediate blocking phase locally with no active leaf agents and report status.", "expect": ["zero_active_agents", "local_blocking_work", "explicit_ACTIVE_status", "no_deactivation", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "At the next phase boundary, re-evaluate delegation; no distinct leaf work exists, so remain local without dispatch.", "expect": ["phase_boundary", "delegation_re_evaluated", "no_distinct_leaf_work", "remain_local", "no_dispatch", "no_mandatory_fanout", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "At a later phase boundary, re-evaluate again and identify useful independent review work.", "expect": ["phase_boundary", "delegation_re_evaluated", "distinct_leaf_work_identified", "delegate_after_local_phase", "no_mandatory_fanout", "ACTIVE"]}
     ],
     "final_state": "ACTIVE"
   }

@@ -11,7 +11,9 @@ Use this reference when the user changes requirements while agents are active, w
 5. Dispatch newly unblocked work up to capacity.
 6. Choose native auto-wake yield or continuous bounded native completion polling under the rules below.
 
-Before a permitted yield, record whether skill instructions, the ledger, and agent handles each persist across turns. Use native continuity when all three do. If skill or ledger state does not persist, emit the compact session token defined in `SKILL.md`; rehydrate it automatically after a usable notification wake, or require the client-specific explicit skill invocation plus `resume <token>:` only after a user-requested one-off pause or yield. If handles do not persist, settle every worker before yielding because the token cannot restore control. On resume, reject older available token state. Treat an unexpectedly unavailable nonterminal handle as `unknown`, retain its exact count, and freeze repository operations and overlapping dispatch when it may still write.
+Apply the lifecycle-neutral boundary rule in `SKILL.md` to host `final`, `final_answer`, and `task_complete` markers, compaction, summary replacement, resume, and notification wake. These boundaries may end a host turn, task, or retained context, but do not authorize a Relay lifecycle transition. Apply response mutations and replacement-token issuance first. Continue through verified native continuity, or require explicit activation with a structurally valid token from the planned non-`OFF` yield. Compare against newer surviving ledger state when available; otherwise accept the explicit token as supplied portable state and disclose that relative staleness cannot be independently proven. If explicit resume is already required, record later lifecycle-neutral host bookkeeping without execution and keep work frozen. Freeze only when neither continuity path is available or surviving state proves the token stale; never infer `OFF`.
+
+Before any permitted yield, record whether skill instructions and the ledger persist and whether every nonterminal agent handle remains controllable; zero nonterminal handles satisfies the handle condition. Treat unverified persistence or controllability as unavailable. If skill or ledger state does not persist, emit the compact session token defined in `SKILL.md`. Its monotonic ledger generation covers every token-carried mutable field, including requirement and session state, pending close, handle accounting, tree stability, and queued/held work. Increment it on any such change and replace the token before a later yield. After any non-`OFF` yield, require the next user turn to request explicit skill activation plus `resume <token>:`, unless a verified automatic wake can reload the skill and current state. If a newer comparator survives, compare and reject stale input. Otherwise accept a structurally valid explicit token as supplied portable state, without claiming comparison to lost state; relative staleness cannot be independently proven. If handles do not persist, settle every worker before yielding because the token cannot restore control. Treat an unexpectedly unavailable nonterminal handle as `unknown`, retain its exact count, and freeze repository operations and overlapping dispatch when it may still write.
 
 ## Route A User Delta
 
@@ -24,6 +26,9 @@ Before a permitted yield, record whether skill instructions, the ledger, and age
 | Reordering only | Update affected implementer | Preserve other work |
 | Defer until later | Do not send yet | Put in HELD with unblock condition |
 | Remove requirement | Interrupt if still active | Mark work SUPERSEDED; retain useful evidence |
+| Stop a task, workstream, worker, action, or direction | Interrupt only affected work | Continue `ACTIVE`; do not treat as a session stop |
+| Explicit Relay invocation while `ACTIVE` | Preserve current handles and work | Preserve scope, ledger, revision, accounting, and pending close; route accompanying text as a delta |
+| Explicit Relay invocation while `STOPPING` | Preserve shutdown work | Do not absorb accompanying new work; hand it back for a fresh invocation after `OFF` |
 | Related work, correction, or doubt while close confirmation is pending | Preserve audited evidence | Clear pending close confirmation, revise, and continue ACTIVE |
 | Stop session | Interrupt all controllable workers | Stop waves and begin safe shutdown |
 
@@ -57,7 +62,7 @@ If research completes and the implementation direction is already authorized, sy
 
 ## Present A Completion Candidate
 
-When the latest requirement revision appears complete, audit the integrated outcome while the session remains `ACTIVE`, then apply the [close-confirmation rules](../SKILL.md#request-close-confirmation). Related work, doubt, a revision change, or a material result clears the pending question and requires a fresh audit. When continuity needs a fallback token, carry the pending question and its audited revision in that token. Settling leaf handles for a bounded wave does not close the Relay session.
+When the latest requirement revision appears complete and no close question is pending, audit the integrated outcome while the session remains `ACTIVE`, then apply the [close-confirmation rules](../SKILL.md#request-close-confirmation). If a question is pending, retain it without another completion candidate or close question. Related work, doubt, a revision change, or a material result clears the pending question and requires a fresh audit before asking again. When continuity needs a fallback token, carry the pending question and its audited revision in that token. Settling leaf handles for a bounded wave does not close the Relay session.
 
 ## Stay Responsive
 
@@ -73,6 +78,6 @@ When the user sends a new message, acknowledge what changed before reporting old
 
 ## Stop And Late Results
 
-Shutdown is `ACTIVE -> STOPPING -> OFF`. Enter `STOPPING` after a user-authored direct explicit stop while `ACTIVE` or a valid later-turn answer to the pending close question. In `STOPPING`, dispatch is frozen but results are still processed and shared-tree writes are audited. Close confirmation or stop does not accept an unstable hand-back. If an uncontrollable writer remains live, disclose the risk, ask a distinct question, prohibit repository operations, and stay `STOPPING` until a later user-authored direct acceptance. Move to `OFF` only after all controllable workers are closed.
+Shutdown is `ACTIVE -> STOPPING -> OFF`. Enter `STOPPING` after an immediate user-authored command clearly targeting the current Relay session while `ACTIVE`, or a valid later-turn answer to the pending close question. A stop aimed at work rather than Relay leaves the session `ACTIVE`. In `STOPPING`, dispatch is frozen but results are still processed and shared-tree writes are audited. Close confirmation or stop does not accept an unstable hand-back. If an uncontrollable writer remains live, disclose the risk, ask a distinct question, prohibit repository operations, and stay `STOPPING` until a later user-authored direct acceptance. Move to `OFF` only after all controllable workers are closed.
 
 After `OFF`, an ordinary late read-only result does not reopen the session. Report late writes, ownership conflicts, or material safety findings as exceptions; do not integrate or dispatch follow-up work without a new explicit activation.
