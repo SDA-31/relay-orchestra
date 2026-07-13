@@ -50,8 +50,6 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
         "responsive_session",
         "yield_main_turn",
         "native_completion_polling",
-        "short_bounded_poll_interval",
-        "repeat_bounded_poll",
         "remain_ACTIVE",
         "completion_candidate",
         "later_close_confirmation_required",
@@ -78,6 +76,7 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
     terminal = steps[-1]
     terminal_required = {
         "no_cross_turn_persistence",
+        "settle_controllable_workers_before_final_response",
         "controllable_workers_closed",
         "no_close_question",
         "same_turn_deactivation",
@@ -90,26 +89,103 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
         "no_later_user_wake_dependency",
         "no_cross_turn_persistence",
         "one_shot_complete",
+        "workers_terminal",
+        "synthesis_complete",
     }
     blocked = {"capability_or_authorization_blocked", "clear_incomplete_handoff"}
     if not completed.issubset(tokens) and not blocked.issubset(tokens):
         fail(f"one-shot transcript lacks completion or blocked handoff: {transcript_id}")
-    wait_count = sum("single_native_bounded_wait" in step["expect"] for step in steps)
-    if wait_count > 1:
-        fail(f"one-shot dependency wait must occur at most once: {transcript_id}")
-    wait_guards = {
+
+    if blocked.issubset(tokens):
+        return
+
+    completed_terminal = {"workers_terminal", "synthesis_complete", "stop_for_terminal_results_and_synthesis"}
+    if not completed_terminal.issubset(terminal["expect"]):
+        fail(f"one-shot final response precedes terminal synthesis: {transcript_id}")
+
+    stop_policy = {
+        "bound_to_originating_message_and_final_response",
+        "no_arbitrary_poll_deadline",
+        "stop_for_terminal_results_and_synthesis",
+        "stop_for_user_cancel_or_redirect",
+        "stop_for_user_specified_overall_limit",
+        "stop_for_genuine_runtime_blocker",
+    }
+    if not stop_policy.issubset(tokens):
+        fail(f"one-shot polling lacks its scope or stop policy: {transcript_id}")
+
+    poll_indexes: list[int] = []
+    disclosure_count = 0
+    poll_guards = {
+        "short_bounded_poll_interval",
         "one_shot_wait_opt_in_exception",
         "strict_dependency_wait",
         "bounded_timeout",
-        "main_turn_in_progress_disclosure",
-        "new_input_may_be_delayed",
+        "active_work_and_next_condition_required",
+        "same_coordinator_turn",
         "no_shell_sleep",
+        "no_long_blind_block",
         "no_busy_poll",
-        "no_wait_loop",
-        "no_repeated_wait",
+        "no_poll_without_active_work_or_next_condition",
     }
-    if wait_count and not wait_guards.issubset(tokens):
-        fail(f"one-shot dependency wait lacks its safety guards: {transcript_id}")
+    for index, step in enumerate(steps):
+        step_tokens = set(step["expect"])
+        if "native_one_shot_completion_polling" in step_tokens:
+            if step["event"] != "coordinator" or not poll_guards.issubset(step_tokens):
+                fail(f"invalid one-shot completion poll: {transcript_id}")
+            poll_indexes.append(index)
+            disclosure_tokens = {
+                "main_turn_in_progress_disclosure",
+                "message_may_wait_up_to_poll_interval",
+            }
+            if "disclosure_once" in step_tokens:
+                if not disclosure_tokens.issubset(step_tokens):
+                    fail(f"one-shot polling disclosure is incomplete: {transcript_id}")
+                disclosure_count += 1
+            elif disclosure_tokens.intersection(step_tokens):
+                fail(f"one-shot polling repeats its disclosure: {transcript_id}")
+
+        if step["event"] == "wait_timeout":
+            timeout_required = {
+                "short_poll_timeout",
+                "poll_timeout_is_scheduling_tick",
+                "poll_timeout_not_task_deadline",
+                "still_running_state_reported",
+                "check_newer_input_between_intervals",
+                "check_delivered_results_between_intervals",
+                "process_newer_input_between_intervals",
+                "process_delivered_results_between_intervals",
+                "active_work_remains",
+                "specific_next_condition",
+                "healthy_workers_not_interrupted",
+                "repeat_bounded_poll",
+                "same_coordinator_turn",
+                "no_deactivation_on_interval_timeout",
+            }
+            if not any(poll_index < index for poll_index in poll_indexes) or not timeout_required.issubset(step_tokens):
+                fail(f"one-shot poll timeout was treated as terminal: {transcript_id}")
+            if terminal_required.intersection(step_tokens):
+                fail(f"one-shot poll timeout deactivates Relay: {transcript_id}")
+            if index + 1 >= len(steps):
+                fail(f"one-shot poll timeout did not schedule another interval: {transcript_id}")
+            next_step = steps[index + 1]
+            if next_step["event"] != "coordinator" or "native_one_shot_completion_polling" not in next_step["expect"]:
+                fail(f"one-shot poll timeout did not schedule another interval: {transcript_id}")
+
+        if "authorized_dependent_work_remains" in step_tokens:
+            if index + 1 >= len(steps):
+                fail(f"one-shot did not advance authorized dependent work: {transcript_id}")
+            next_step = steps[index + 1]
+            dependent_required = {"dispatch_authorized_dependent_work", "native_one_shot_completion_polling"}
+            if next_step["event"] != "coordinator" or not dependent_required.issubset(next_step["expect"]):
+                fail(f"one-shot did not dispatch and poll authorized dependent work: {transcript_id}")
+
+    if len(poll_indexes) < 2:
+        fail(f"one-shot completion must use repeated bounded polling: {transcript_id}")
+    if disclosure_count != 1:
+        fail(f"one-shot polling must disclose its responsiveness cost once: {transcript_id}")
+    if not any(step["event"] == "wait_timeout" for step in steps):
+        fail(f"one-shot completion lacks interval-timeout coverage: {transcript_id}")
 
 
 def validate() -> None:
@@ -157,8 +233,17 @@ def validate() -> None:
         "Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
         "ordinary one-off instruction",
         "Do not create a mode, option, scope, toggle, or persistent policy",
-        "explicitly chosen one-shot",
-        "at most one bounded native wait without separate wait opt-in",
+        "originating user message and its final response, not by an arbitrary poll timeout",
+        "native short bounded completion polls repeatedly within the same coordinator turn",
+        "healthy workers or authorized dependent work remain",
+        "A normal interval timeout is a scheduling tick, not the one-shot task deadline",
+        "Never interrupt healthy workers solely because one interval elapsed",
+        "Complete normally only after all workers are terminal and synthesis is complete",
+        "Stop earlier only when the user explicitly cancels or redirects",
+        "a user-specified overall limit is reached",
+        "a genuine host or runtime blocker prevents progress",
+        "Settle all controllable workers before the one-shot final response",
+        "no cross-turn persistence",
         "all controllable workers are closed",
         "distinct hand-back question",
         "Working without worktree isolation",
@@ -216,6 +301,9 @@ def validate() -> None:
         "continues through dependent waves, integration, verification, and a completion candidate without requiring another user message",
         "coordinator remains **In Progress** and a message may wait up to one poll interval",
         "never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
+        "repeats short native completion polls in its originating turn",
+        "treats an interval timeout as a scheduling tick",
+        "settling every controllable worker before its final response",
         "not a mode, option, scope, toggle, or persistent policy",
     ):
         if phrase not in readme:
@@ -287,13 +375,13 @@ def validate() -> None:
 
     required_case_expectations = {
         "explicit_one_shot_auto_deactivates_without_close_question": {
-            "one_shot_scope", "bounded_wave", "single_native_bounded_wait", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "main_turn_in_progress_disclosure", "new_input_may_be_delayed", "no_shell_sleep", "no_busy_poll", "no_wait_loop", "no_later_user_wake_dependency", "no_repeated_wait", "no_cross_turn_persistence", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
+            "one_shot_scope", "bounded_wave", "native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "same_coordinator_turn", "bound_to_originating_message_and_final_response", "no_arbitrary_poll_deadline", "short_poll_timeout", "poll_timeout_is_scheduling_tick", "poll_timeout_not_task_deadline", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "healthy_workers_not_interrupted", "repeat_bounded_poll", "authorized_dependent_work_remains", "dispatch_authorized_dependent_work", "stop_for_terminal_results_and_synthesis", "stop_for_user_cancel_or_redirect", "stop_for_user_specified_overall_limit", "stop_for_genuine_runtime_blocker", "workers_terminal", "synthesis_complete", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition", "no_later_user_wake_dependency", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
         },
         "bare_explicit_invocation_defaults_to_live_session": {
             "default_live_scope", "ACTIVE", "responsive_session", "later_close_confirmation_required"
         },
         "one_shot_blocked_handoff": {
-            "one_shot_scope", "clear_incomplete_handoff", "no_cross_turn_persistence", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
+            "one_shot_scope", "clear_incomplete_handoff", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
         },
         "no_auto_wake_continues_to_completion_candidate": {
             "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "dependent_waves", "integration", "verification", "completion_candidate", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition"
@@ -722,8 +810,24 @@ def validate() -> None:
         "same_turn_deactivation",
         "no_close_question",
         "no_cross_turn_persistence",
-        "single_native_bounded_wait",
+        "native_one_shot_completion_polling",
         "one_shot_wait_opt_in_exception",
+        "same_coordinator_turn",
+        "bound_to_originating_message_and_final_response",
+        "no_arbitrary_poll_deadline",
+        "poll_timeout_is_scheduling_tick",
+        "poll_timeout_not_task_deadline",
+        "healthy_workers_not_interrupted",
+        "no_deactivation_on_interval_timeout",
+        "authorized_dependent_work_remains",
+        "dispatch_authorized_dependent_work",
+        "stop_for_terminal_results_and_synthesis",
+        "stop_for_user_cancel_or_redirect",
+        "stop_for_user_specified_overall_limit",
+        "stop_for_genuine_runtime_blocker",
+        "workers_terminal",
+        "synthesis_complete",
+        "settle_controllable_workers_before_final_response",
         "no_later_user_wake_dependency",
         "yield_main_turn",
         "result_notifications",
@@ -745,11 +849,8 @@ def validate() -> None:
         "strict_dependency_wait",
         "bounded_timeout",
         "main_turn_in_progress_disclosure",
-        "new_input_may_be_delayed",
         "no_shell_sleep",
         "no_busy_poll",
-        "no_wait_loop",
-        "no_repeated_wait",
         "short_poll_timeout",
         "still_running_state_reported",
         "check_newer_input_between_intervals",
