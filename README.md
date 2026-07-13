@@ -3,8 +3,8 @@
 <p align="center"><strong>Coordinate parallel agents across large, cross-cutting tasks while you keep steering.</strong></p>
 
 <p align="center">
-  <a href="https://skills.sh/SDA-31/relay-orchestra"><img src="https://skills.sh/b/SDA-31/relay-orchestra" alt="skills.sh installs"></a>
-  <a href="https://agentskills.io/specification"><img src="https://img.shields.io/badge/Agent%20Skills-compatible-2563EB" alt="Agent Skills compatible"></a>
+  <a href="https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra"><img src="https://img.shields.io/badge/skills.sh-view%20skill-111111" alt="View Relay Orchestra on skills.sh"></a>
+  <a href="https://agentskills.io/specification"><img src="https://img.shields.io/badge/Agent%20Skills-format--compatible-2563EB" alt="Agent Skills format-compatible"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-374151" alt="MIT license"></a>
 </p>
 
@@ -13,7 +13,7 @@
   <a href="#when-it-helps">When it helps</a> ·
   <a href="#how-a-live-session-works">Live sessions</a> ·
   <a href="#compatibility-and-limitations">Compatibility</a> ·
-  <a href="#documentation">Docs</a>
+  <a href="#documentation">Documentation</a>
 </p>
 
 ---
@@ -32,9 +32,9 @@ Relay Orchestra has no runtime dependencies. The skills CLI uses Node.js only du
 npx skills add SDA-31/relay-orchestra
 ```
 
-The CLI detects supported agents and installs to the current project by default; add `-g` for a user-level installation.
+The CLI detects supported agents and installs for the project in your current directory by default; add `-g` for a user-level installation.
 
-[View it on skills.sh](https://skills.sh/SDA-31/relay-orchestra), or see [Installation](INSTALL.md) for standalone scripts, pinned revisions, exact paths, and custom destinations. Start a new task or chat afterward if your client caches its skill catalog.
+[View it on skills.sh](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra), or see [Installation](INSTALL.md) for standalone scripts, pinned revisions, exact paths, and custom destinations. Start a new task or chat afterward if your client caches its skill catalog.
 
 ### Invoke It
 
@@ -45,7 +45,7 @@ Use the Relay Orchestra skill for this request only. Run three read-only agents
 to review the current changes, then verify and synthesize their findings.
 ```
 
-> **Usage warning:** Each parallel agent performs separate model work, so token or credit use can rise quickly. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
+> **Usage warning:** Every delegated agent run performs separate model work, whether concurrent or sequential, so token or credit use can rise quickly. Start with the fewest agents that provide distinct value, and check your client's usage or billing controls.
 
 On clients with full live support, a successful start returns a short receipt while work continues; other clients disclose their bounded-wave fallback:
 
@@ -78,6 +78,8 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 
 ```mermaid
 flowchart TD
+    accTitle: Relay Orchestra live session
+    accDescr: A user directs Relay Orchestra, which dispatches native agents, synthesizes their work, and returns the result.
     U["You: start or revise the task"]
     U --> C["Relay Orchestra: acknowledge and dispatch"]
     C --> A["Native agents: work in parallel"]
@@ -152,10 +154,6 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 - [Coordination patterns](skills/relay-orchestra/references/patterns.md)
 - [Prompt examples](examples/prompts.md)
 - [Contributing](CONTRIBUTING.md)
-
-## Related Work
-
-The design draws from public work by [Dimillian](https://github.com/Dimillian/Skills), [addyosmani](https://github.com/addyosmani/agent-skills), [obra/superpowers](https://github.com/obra/superpowers), [ZypherHQ](https://github.com/ZypherHQ/agent-orchestration-skill), [am-will](https://github.com/am-will/codex-skills), and [howells/arc](https://github.com/howells/arc).
 
 ## License
 

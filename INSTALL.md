@@ -10,13 +10,13 @@ Relay Orchestra has no runtime dependencies. The skills CLI uses Node.js and npm
 npx skills add SDA-31/relay-orchestra
 ```
 
-The CLI discovers the `relay-orchestra` skill, detects supported agents, and installs to the current project by default. Add `-g` for a user-level installation. Update it later with:
+The CLI discovers the `relay-orchestra` skill, detects supported agents, and installs it for the project in your current directory by default. Add `-g` for a user-level installation. Update it later with:
 
 ```sh
 npx skills update relay-orchestra
 ```
 
-See the [skills.sh listing](https://skills.sh/SDA-31/relay-orchestra) for discovery. After installation, start a new task or chat if the client caches its skill catalog.
+See the [skills.sh listing](https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra) for discovery. After installation, start a new task or chat if the client caches its skill catalog.
 
 ## Standalone Script Installation
 
@@ -79,7 +79,7 @@ For remote macOS/Linux installation, pass options after `bash -s --` (for exampl
 | Flag | Purpose |
 | --- | --- |
 | `--target` | Skip every question and choose a user target directly. Examples: `--target codex`, `--target claude`, `--target gemini`. Repeatable; `all` installs separate copies. |
-| `--project` | Install under a project's `.agents/skills` directory. |
+| `--project <project-path>` | Install under the specified project's `.agents/skills` directory. |
 | `--destination` | Install to an exact skill directory; repeatable. |
 | `--home` | Override the home directory used to resolve targets. |
 | `--codex-home` | Override the Codex home directory. |
@@ -88,6 +88,12 @@ For remote macOS/Linux installation, pass options after `bash -s --` (for exampl
 | `--force` | Replace an existing destination using a staged replacement with rollback on failure. |
 | `--dry-run` | Report destinations without writing. |
 | `--json` | Emit machine-readable output. |
+
+For example, from a local checkout:
+
+```sh
+./install.sh --project /path/to/project
+```
 
 ## Updating Standalone Installations
 

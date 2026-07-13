@@ -3,12 +3,14 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
@@ -21,6 +23,28 @@ from scripts import install as installer_module
 INSTALLER = ROOT / "scripts" / "install.py"
 SHELL_INSTALLER = ROOT / "install.sh"
 POWERSHELL_INSTALLER = ROOT / "install.ps1"
+SKILLS_URL = "https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra"
+SKILLS_BADGE = "https://img.shields.io/badge/skills.sh-view%20skill-111111"
+AGENT_SKILLS_URL = "https://agentskills.io/specification"
+AGENT_SKILLS_BADGE = "https://img.shields.io/badge/Agent%20Skills-format--compatible-2563EB"
+
+
+class LinkedImageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.current_href: str | None = None
+        self.images: list[tuple[str | None, dict[str, str | None]]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "a":
+            self.current_href = attributes.get("href")
+        elif tag == "img":
+            self.images.append((self.current_href, attributes))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a":
+            self.current_href = None
 
 
 class InstallerTests(unittest.TestCase):
@@ -428,15 +452,36 @@ class ShellInstallerTests(unittest.TestCase):
 class ReadmeInstallerContractTests(unittest.TestCase):
     def test_primary_skills_cli_install_is_documented(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        installation = (ROOT / "INSTALL.md").read_text(encoding="utf-8")
+        parser = LinkedImageParser()
+        parser.feed(readme)
+        skills_badges = [attributes for href, attributes in parser.images if href == SKILLS_URL]
+        agent_skills_badges = [attributes for href, attributes in parser.images if href == AGENT_SKILLS_URL]
+
         self.assertIn("npx skills add SDA-31/relay-orchestra", readme)
         self.assertEqual(readme.count("npx skills add SDA-31/relay-orchestra"), 1)
-        self.assertIn("https://skills.sh/b/SDA-31/relay-orchestra", readme)
-        self.assertIn("https://skills.sh/SDA-31/relay-orchestra", readme)
+        self.assertEqual(
+            skills_badges,
+            [{"src": SKILLS_BADGE, "alt": "View Relay Orchestra on skills.sh"}],
+        )
+        self.assertEqual(
+            agent_skills_badges,
+            [{"src": AGENT_SKILLS_BADGE, "alt": "Agent Skills format-compatible"}],
+        )
+        self.assertIn(f"]({SKILLS_URL})", readme)
+        self.assertIn(f"]({SKILLS_URL})", installation)
+        skills_urls = re.findall(
+            r"https://(?:www\.)?skills\.sh/[^\s\"')>]+",
+            readme + installation,
+        )
+        self.assertEqual(set(skills_urls), {SKILLS_URL})
         self.assertIn("## When It Helps", readme)
         self.assertIn("market or competitor research", readme)
         self.assertIn("multi-module implementation", readme)
         self.assertIn("flowchart TD", readme)
         self.assertNotIn("flowchart LR", readme)
+        self.assertIn("accTitle:", readme)
+        self.assertIn("accDescr:", readme)
         self.assertNotIn("Python 3.7", readme)
         self.assertNotIn("curl -fsSL", readme)
         self.assertNotIn("irm https://", readme)
@@ -454,6 +499,8 @@ class ReadmeInstallerContractTests(unittest.TestCase):
         self.assertIn("interactive menu", installation.lower())
         self.assertIn("`--target codex`", installation)
         self.assertIn("`bash -s -- --target codex`", installation)
+        self.assertIn("`--project <project-path>`", installation)
+        self.assertIn("./install.sh --project /path/to/project", installation)
 
     def test_powershell_remote_bootstrap_contract(self) -> None:
         script = POWERSHELL_INSTALLER.read_text(encoding="utf-8")

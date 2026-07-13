@@ -67,7 +67,3 @@ Normalize results into confirmed consensus, meaningful disagreement, verified ev
 - Raw transcript forwarding
 - Completion based only on worker summaries
 - Permanent session activation
-
-## Related Work
-
-The design is informed by public projects including Dimillian Skills, addyosmani/agent-skills, obra/superpowers, ZypherHQ/agent-orchestration-skill, am-will/codex-skills, and howells/arc. Relay Orchestra keeps only the portable coordination layer and does not require a fixed reviewer set, external CLI, run ledger, plan format, or GUI.
