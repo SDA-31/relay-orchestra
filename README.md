@@ -1,6 +1,6 @@
 <h1 align="center">Relay Orchestra</h1>
 
-<p align="center"><strong>Coordinate parallel agents across large, cross-cutting tasks while you keep steering.</strong></p>
+<p align="center"><strong>Open-source Agent Skill for coordinating parallel AI agents across coding, research, audits, and migrations.</strong></p>
 
 <p align="center">
   <a href="https://www.skills.sh/sda-31/relay-orchestra/relay-orchestra"><img src="https://img.shields.io/badge/skills.sh-view%20skill-111111" alt="View Relay Orchestra on skills.sh"></a>
@@ -13,14 +13,15 @@
   <a href="#when-it-helps">When it helps</a> ·
   <a href="#how-a-live-session-works">Live sessions</a> ·
   <a href="#compatibility-and-limitations">Compatibility</a> ·
-  <a href="#documentation">Documentation</a>
+  <a href="#documentation">Documentation</a> ·
+  <a href="#feedback-and-support">Feedback</a>
 </p>
 
 ---
 
-Relay Orchestra is an explicit multi-agent orchestration skill for large, cross-cutting work. It coordinates your client's built-in agents, assigns focused workstreams, and combines them into one verified result in either a one-shot request or a live multi-turn session.
+Relay Orchestra is an explicit multi-agent orchestration skill for [Codex, Claude Code, Gemini CLI, and other Agent Skills clients](skills/relay-orchestra/references/platforms.md). It coordinates built-in subagents, gives each one a focused task, and combines their work into one checked result. You can use it once or keep a live multi-turn session open while you add new instructions.
 
-Use it for market or competitor research, large codebase audits, module or multi-module implementation, migrations, and cross-cutting reviews. Clients without live parallel support fall back honestly to bounded waves, sequential work, or dispatch-ready briefs.
+Use it for market or competitor research, large codebase audits, module or multi-module implementation, migrations, and cross-cutting reviews. Clients without live parallel support fall back honestly to smaller batches, one-by-one work, or ready-to-send agent instructions.
 
 A live session stays active across related follow-ups, even after the objective appears complete. It enters shutdown only after a later direct answer to its current close question or an explicit stop command. An explicit one-shot invocation ends in the same response without a close question or cross-turn persistence.
 
@@ -104,7 +105,7 @@ You remain the source of truth. New instructions take priority over planned foll
 
 ```text
 You: Start a live Relay Orchestra session. Improve the recipe import flow.
-Start two researchers, then have one implementer use their findings.
+Start two read-only researchers, then have one implementer use their findings.
 
 Relay Orchestra: Working without worktree isolation. Agents share the current
 working tree, and file changes appear there immediately.
@@ -138,9 +139,13 @@ context-rich researcher. CSV scope and accessibility review remain unchanged.
 
 ## Safety and Working Trees
 
-Relay Orchestra uses the shared working tree by default and says so when a run starts. Concurrent writers must own separate paths; overlapping edits should be narrowed, serialized, or isolated.
+Relay can use the shared project checkout for read-only agents and when only one agent edits at a time, as long as existing and new changes can be tracked safely. If two or more agents may edit files at the same time, Relay plans a separate Git worktree (a separate project checkout) for each editor.
 
-Worktrees are opt-in. Relay Orchestra does not create or use one without explicit approval, and a branch alone is not treated as isolation. It does not bypass host permissions, make overlapping edits safe, or claim that a worker stopped when that cannot be confirmed.
+Relay never creates worktrees without asking. Before an editing agent starts, Relay lists the exact files it may change and the behavior that must stay compatible. It also explains disk, dependency, build-output, and cleanup costs. If worktrees are unavailable or declined, editing agents run one after another. The next agent starts only after the previous one finishes and Relay reviews its changes.
+
+If Relay cannot tell who made an existing change, it treats the file as yours and does not edit it. You can allow Relay to edit a specific changed file; that permission covers only that file. A worktree keeps an agent's edits separate, but Relay still checks your changes before integration. If you edit a file while a shared-tree agent is editing it, Relay pauses overlapping work until both sets of changes are reviewed.
+
+Worktrees separate checked-out files, but they do not prevent API, schema, or design conflicts. Two agents never edit the same file path at the same time, even in separate worktrees. Relay integrates the changes from one finished and reviewed writer at a time, then checks that shared behavior still works.
 
 ## Compatibility and Limitations
 
@@ -154,10 +159,15 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Result notifications | Delivery is checked separately from whether a notification starts a coordinator turn. |
 | Automatic coordinator wake | Enables native yield and resumption; otherwise Relay uses native short bounded completion waits and processes newer input between intervals. |
 | Lifecycle controls | Follow-up, interruption, and closure vary by client and version. |
+| Context compaction | Compacting the chat does not close Relay. If the client preserves session state, Relay continues normally. Otherwise, Relay can continue only from a valid resume token that it issued earlier. |
 | Concurrency | The host sets practical limits; Relay Orchestra schedules within them. |
-| Worktrees | Never assumed and always require explicit approval. |
+| Worktrees | Planned by default for two or more concurrent writers; creation always requires explicit approval, otherwise writers are serialized. |
 
-Without auto-wake, a live session automatically uses native completion waits or polling in short bounded intervals while active work remains and a specific completion or status condition can be observed. Between intervals Relay processes newer user input and delivered results, then advances dependent waves, integration, verification, and synthesis. It discloses once that the coordinator remains **In Progress** and a message may wait up to one poll interval. A result, orchestration completion, redirect, stop, one-off pause or yield request, or real blocker ends the current polling cycle. Relay never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition. One-shot work repeats short native completion polls in its originating turn, treats an interval timeout as a scheduling tick, and deactivates after settling every controllable worker before its final response. A request to pause or yield until the user returns is an ordinary one-off instruction, not a mode, option, scope, toggle, or persistent policy.
+Without auto-wake, a live session automatically uses native completion waits or polling in short bounded intervals while active work remains and a specific completion or status condition can be observed. Between intervals Relay processes newer user input and delivered results, then advances dependent waves, integration, verification, and synthesis. It discloses once that the coordinator remains **In Progress** and a message may wait up to one poll interval.
+
+A result, orchestration completion, redirect, stop, one-off pause or yield request, or real blocker ends the current polling cycle. Relay never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition.
+
+One-shot work repeats short native completion polls in its originating turn, treats an interval timeout as a scheduling tick, and deactivates after settling every controllable worker before its final response. A request to pause or yield until the user returns is an ordinary one-off instruction, not a mode, option, scope, toggle, or persistent policy.
 
 See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is an explicitly scoped coordinator, not an always-on automation framework.
 
@@ -168,3 +178,7 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 - [Coordination patterns](skills/relay-orchestra/references/patterns.md)
 - [Prompt examples](examples/prompts.md)
 - [Contributing](CONTRIBUTING.md)
+
+## Feedback and Support
+
+Found a bug, compatibility problem, or unclear instruction? [Open a GitHub issue](https://github.com/SDA-31/relay-orchestra/issues). Ideas and real-world test reports are welcome too.

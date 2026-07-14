@@ -6,7 +6,8 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
+import unicodedata
+from pathlib import Path, PurePosixPath
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,66 @@ SKILL = SKILL_DIR / "SKILL.md"
 
 def fail(message: str) -> None:
     raise ValueError(message)
+
+
+def canonical_owned_path(value: object, root: Path = ROOT) -> str:
+    """Return a stable logical identity for one exact repository file path."""
+    if not isinstance(value, str) or not value or value != value.strip():
+        fail("owned path must be a non-empty canonical string")
+    if (
+        "\0" in value
+        or "\\" in value
+        or ":" in value
+        or any(ord(character) < 32 or character in '<>"|' for character in value)
+        or re.match(r"^[A-Za-z]:", value)
+        or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value)
+        or any(character in value for character in "*?[")
+    ):
+        fail(f"owned path is not an exact POSIX file path: {value!r}")
+
+    path = PurePosixPath(value)
+    windows_reserved = re.compile(r"(?i)^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\..*)?$")
+    if (
+        path.is_absolute()
+        or value != path.as_posix()
+        or any(part in {"", ".", ".."} for part in value.split("/"))
+        or any(part.endswith((".", " ")) for part in path.parts)
+        or any(windows_reserved.fullmatch(part) for part in path.parts)
+    ):
+        fail(f"owned path must be canonical and repository-relative: {value!r}")
+
+    root = root.resolve()
+    resolved = (root / Path(*path.parts)).resolve(strict=False)
+    try:
+        relative = resolved.relative_to(root)
+    except ValueError:
+        fail(f"owned path resolves outside the repository: {value!r}")
+    if resolved.is_dir():
+        fail(f"owned path must name a file, not a directory: {value!r}")
+
+    def portable_key(candidate: Path) -> str:
+        return unicodedata.normalize("NFC", candidate.as_posix()).casefold()
+
+    identities = {portable_key(relative)}
+    if resolved.exists():
+        stat = resolved.stat()
+        if stat.st_nlink > 1:
+            for candidate in root.rglob("*"):
+                try:
+                    candidate_stat = candidate.stat()
+                except OSError:
+                    continue
+                if (candidate_stat.st_dev, candidate_stat.st_ino) != (stat.st_dev, stat.st_ino):
+                    continue
+                try:
+                    candidate_relative = candidate.resolve().relative_to(root)
+                except (OSError, ValueError):
+                    continue
+                identities.add(portable_key(candidate_relative))
+
+    # The minimum portable spelling collapses hardlinks while NFC and case-folding
+    # also collapse aliases that differ only across filesystem conventions.
+    return f"path:{min(identities)}"
 
 
 def frontmatter(text: str) -> dict[str, str]:
@@ -188,6 +249,536 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
         fail(f"one-shot completion lacks interval-timeout coverage: {transcript_id}")
 
 
+def validate_writer_dispatches(transcript: dict[str, object]) -> None:
+    transcript_id = transcript["id"]
+    steps = transcript["steps"]
+    dispatches = transcript.get("writer_dispatches")
+    expected_writer_ids_by_step: dict[int, set[str]] = {}
+    for index, step in enumerate(steps, start=1):
+        if "writer_dispatch" not in step["expect"]:
+            if "writer_ids" in step:
+                fail(f"writer ids appear without a writer dispatch: {transcript_id}")
+            continue
+        writer_ids = step.get("writer_ids")
+        if (
+            not isinstance(writer_ids, list)
+            or not writer_ids
+            or len(set(writer_ids)) != len(writer_ids)
+            or not all(isinstance(writer_id, str) and writer_id for writer_id in writer_ids)
+        ):
+            fail(f"writer dispatch step lacks exact writer ids: {transcript_id}")
+        expected_writer_ids_by_step[index] = set(writer_ids)
+    if dispatches is None:
+        if expected_writer_ids_by_step:
+            fail(f"writer dispatch lacks structural ownership data: {transcript_id}")
+        return
+    if not isinstance(dispatches, list) or not dispatches:
+        fail(f"writer_dispatches must be a non-empty list: {transcript_id}")
+
+    required = {
+        "id", "step", "owned_paths", "interfaces_invariants", "isolation",
+        "after_terminal_and_audited",
+    }
+    allowed = required | {"checkout_id", "base_revision"}
+    by_id: dict[str, dict[str, object]] = {}
+    canonical_paths_by_id: dict[str, set[str]] = {}
+    checkout_ids: set[str] = set()
+    actual_writer_ids_by_step: dict[int, set[str]] = {}
+    all_tokens_by_step = [set(step["expect"]) for step in steps]
+    for dispatch in dispatches:
+        if not isinstance(dispatch, dict) or not required.issubset(dispatch) or not set(dispatch).issubset(allowed):
+            fail(f"invalid writer dispatch: {transcript_id}")
+        writer_id = dispatch["id"]
+        if not isinstance(writer_id, str) or not writer_id or writer_id in by_id:
+            fail(f"invalid or duplicate writer id: {transcript_id}")
+        step_number = dispatch["step"]
+        if not isinstance(step_number, int) or not 1 <= step_number <= len(steps):
+            fail(f"invalid writer dispatch step: {transcript_id}")
+        step = steps[step_number - 1]
+        if step["event"] != "coordinator" or "writer_dispatch" not in step["expect"]:
+            fail(f"writer dispatch step is not coordinator-authored: {transcript_id}")
+        owned_paths = dispatch["owned_paths"]
+        interfaces = dispatch["interfaces_invariants"]
+        dependencies = dispatch["after_terminal_and_audited"]
+        if not isinstance(owned_paths, list) or not owned_paths:
+            fail(f"writer dispatch lacks exact owned paths: {transcript_id}")
+        canonical_paths = {canonical_owned_path(path) for path in owned_paths}
+        if len(canonical_paths) != len(owned_paths):
+            fail(f"writer dispatch contains aliased or duplicate owned paths: {transcript_id}")
+        if (
+            not isinstance(interfaces, list)
+            or not interfaces
+            or not all(isinstance(contract, str) and contract for contract in interfaces)
+        ):
+            fail(f"writer dispatch lacks interfaces or invariants: {transcript_id}")
+        if dispatch["isolation"] not in {"shared", "worktree"}:
+            fail(f"invalid writer isolation: {transcript_id}")
+        if dispatch["isolation"] == "worktree":
+            if not transcript["capabilities"]["isolated_writer_checkouts"]:
+                fail(f"worktree writer dispatched without isolation capability: {transcript_id}")
+            if not all(isinstance(dispatch.get(key), str) and dispatch[key] for key in ("checkout_id", "base_revision")):
+                fail(f"worktree writer lacks checkout id or base revision: {transcript_id}")
+            if dispatch["checkout_id"] in checkout_ids:
+                fail(f"worktree writers share a checkout id: {transcript_id}")
+            checkout_ids.add(dispatch["checkout_id"])
+        elif "checkout_id" in dispatch:
+            fail(f"shared writer claims a checkout id: {transcript_id}")
+        if not isinstance(dependencies, list) or not all(isinstance(item, str) and item for item in dependencies):
+            fail(f"invalid writer serialization dependencies: {transcript_id}")
+        by_id[writer_id] = dispatch
+        canonical_paths_by_id[writer_id] = canonical_paths
+        actual_writer_ids_by_step.setdefault(step_number, set()).add(writer_id)
+
+    if actual_writer_ids_by_step != expected_writer_ids_by_step:
+        fail(f"writer dispatch ids and structural records differ: {transcript_id}")
+
+    for writer_id, dispatch in by_id.items():
+        step_number = dispatch["step"]
+        prior_tokens = set().union(*all_tokens_by_step[:step_number - 1])
+        if "predispatch_contracts_recorded" not in prior_tokens:
+            fail(f"writer ownership or contracts were not recorded before dispatch: {transcript_id}")
+        for dependency in dispatch["after_terminal_and_audited"]:
+            if dependency == writer_id or dependency not in by_id:
+                fail(f"invalid writer serialization dependency: {transcript_id}")
+            if by_id[dependency]["step"] >= step_number:
+                fail(f"serialized writer was not dispatched later: {transcript_id}")
+            earlier_tokens = set().union(*all_tokens_by_step[:step_number - 1])
+            required_tokens = {f"{dependency}_terminal", f"{dependency}_audited"}
+            if not required_tokens.issubset(earlier_tokens):
+                fail(f"serialized writer started before terminal audit: {transcript_id}")
+        if dispatch["isolation"] == "worktree":
+            approval_steps = [
+                index
+                for index, step in enumerate(steps[:step_number - 1], start=1)
+                if step["event"] == "user" and "worktrees_approved" in step["expect"]
+            ]
+            if not approval_steps:
+                fail(f"worktree writer dispatched without prior approval: {transcript_id}")
+            creation_steps = [
+                index
+                for index, step in enumerate(steps[:step_number], start=1)
+                if step["event"] == "coordinator" and "worktrees_created_with_approval" in step["expect"]
+            ]
+            if not any(approval < creation for approval in approval_steps for creation in creation_steps):
+                fail(f"worktree creation did not follow user approval: {transcript_id}")
+
+    def depends_on(writer_id: str, dependency: str, seen: set[str] | None = None) -> bool:
+        if seen is None:
+            seen = set()
+        if writer_id in seen:
+            fail(f"writer serialization dependency cycle: {transcript_id}")
+        seen.add(writer_id)
+        direct = by_id[writer_id]["after_terminal_and_audited"]
+        return dependency in direct or any(depends_on(item, dependency, seen.copy()) for item in direct)
+
+    writer_ids = list(by_id)
+    for index, writer_id in enumerate(writer_ids):
+        for other_id in writer_ids[index + 1:]:
+            ordered = depends_on(writer_id, other_id) or depends_on(other_id, writer_id)
+            first = by_id[writer_id]
+            second = by_id[other_id]
+            if not ordered and {first["isolation"], second["isolation"]} != {"worktree"}:
+                fail(f"potentially concurrent writers must use approved worktrees: {transcript_id}")
+            if not ordered and canonical_paths_by_id[writer_id].intersection(canonical_paths_by_id[other_id]):
+                fail(f"concurrent writers share owned paths: {transcript_id}")
+
+
+def validate_writer_continuation(transcript: dict[str, object]) -> None:
+    capabilities = transcript["capabilities"]
+    steps = transcript["steps"]
+    for index, step in enumerate(steps):
+        tokens = set(step["expect"])
+        if "writer_dispatch" not in tokens:
+            continue
+        if step["event"] != "coordinator":
+            fail(f"writer dispatch is not coordinator-authored: {transcript['id']}")
+        if transcript["scope"] == "one_shot":
+            if "native_one_shot_completion_polling" not in tokens:
+                fail(f"one-shot writer dispatch lacks native polling continuation: {transcript['id']}")
+            continue
+        if capabilities["notification_auto_wake"]:
+            required = {"dispatch_nonblocking", "result_notifications", "notification_auto_wake", "yield_main_turn"}
+            future_wake = any(
+                later["event"] == "notification_wake"
+                and {"worker_result_delivered", "resume_natively"}.issubset(later["expect"])
+                for later in steps[index + 1:]
+            )
+            if not required.issubset(tokens) or not future_wake:
+                fail(f"writer dispatch lacks automatic-wake continuation: {transcript['id']}")
+        elif "native_completion_polling" not in tokens:
+            fail(f"writer dispatch lacks native polling continuation: {transcript['id']}")
+
+
+def validate_unavailable_worktrees(transcripts: list[dict[str, object]]) -> None:
+    try:
+        transcript = next(
+            item for item in transcripts
+            if item["id"] == "unavailable_worktrees_serialize_writers"
+        )
+    except StopIteration:
+        fail("missing unavailable-worktrees transcript")
+    tokens = {token for step in transcript["steps"] for token in step["expect"]}
+    required = {
+        "worktrees_unavailable", "serialization_fallback", "shared_tree_serial_writers",
+        "writer_b_after_writer_a_terminal_and_audited", "no_concurrent_shared_writers",
+    }
+    if transcript["capabilities"]["isolated_writer_checkouts"] or not required.issubset(tokens):
+        fail("unavailable-worktrees transcript must prove serialized fallback")
+
+
+def validate_direct_same_path_request_serialized(transcripts: list[dict[str, object]]) -> None:
+    try:
+        transcript = next(
+            item for item in transcripts
+            if item["id"] == "direct_same_path_concurrency_request_is_serialized"
+        )
+    except StopIteration:
+        fail("missing direct same-path concurrency transcript")
+
+    tokens = {token for step in transcript["steps"] for token in step["expect"]}
+    required = {
+        "direct_same_path_concurrency_requested",
+        "ownership_map_before_dispatch",
+        "same_path_overlap_detected",
+        "direct_concurrency_request_does_not_override_gate",
+        "worktree_approval_does_not_override_same_path_exclusivity",
+        "second_same_path_writer_not_dispatched",
+        "same_path_work_serialized",
+        "terminal_and_audited_before_reassignment",
+        "same_path_reassigned_after_terminal_audit",
+    }
+    dispatches = transcript.get("writer_dispatches", [])
+    if not transcript["capabilities"]["isolated_writer_checkouts"] or not required.issubset(tokens):
+        fail("direct same-path request must be serialized despite worktree capability and approval")
+    if len(dispatches) != 2:
+        fail("direct same-path request must account for exactly two writer dispatches")
+    first, second = dispatches
+    if not {
+        canonical_owned_path(path) for path in first["owned_paths"]
+    }.intersection(canonical_owned_path(path) for path in second["owned_paths"]):
+        fail("direct same-path transcript does not model an owned-path collision")
+    if first["id"] not in second["after_terminal_and_audited"]:
+        fail("second same-path writer is not structurally serialized after the first")
+    if first["isolation"] != "shared" or second["isolation"] != "shared":
+        fail("serialized same-path writers should use the at-most-one-writer shared-tree path")
+
+
+def validate_verified_native_compaction(transcripts: list[dict[str, object]]) -> None:
+    try:
+        transcript = next(
+            item for item in transcripts
+            if item["id"] == "verified_native_compaction_continues_without_reinvocation"
+        )
+    except StopIteration:
+        fail("missing verified-native-compaction transcript")
+
+    capabilities = transcript["capabilities"]
+    if not all(
+        capabilities[key]
+        for key in ("skill_instructions_persist", "ledger_persists", "agent_handles_persist")
+    ):
+        fail("verified native compaction must preserve skill, ledger, and handle continuity")
+
+    steps = transcript["steps"]
+    tokens = {token for step in steps for token in step["expect"]}
+    if {"session_token", "explicit_skill_resume"}.intersection(tokens):
+        fail("verified native compaction must not require portable resume")
+
+    compact_indexes = [index for index, step in enumerate(steps) if step["event"] == "compaction"]
+    if len(compact_indexes) != 1:
+        fail("verified native compaction transcript must contain exactly one compaction event")
+    compact_index = compact_indexes[0]
+    compact_tokens = set(steps[compact_index]["expect"])
+    boundary_required = {
+        "manual_compaction", "compaction_boundary", "lifecycle_neutral",
+        "native_continuity_verified", "skill_instructions_preserved", "ledger_preserved",
+        "pending_close_identity_preserved", "canary_preserved", "no_stop_authorization",
+        "never_infer_OFF", "remain_ACTIVE",
+    }
+    if not boundary_required.issubset(compact_tokens):
+        fail("verified native compaction boundary lacks continuity evidence")
+
+    recorded_indexes = [
+        index for index, step in enumerate(steps)
+        if "canary_recorded" in step["expect"]
+    ]
+    if (
+        len(recorded_indexes) != 1
+        or recorded_indexes[0] >= compact_index
+        or steps[recorded_indexes[0]]["event"] != "coordinator"
+    ):
+        fail("compaction canary must be recorded exactly once before compaction")
+
+    canary_id = steps[recorded_indexes[0]].get("canary_id")
+    if not isinstance(canary_id, str) or not canary_id:
+        fail("recorded compaction canary lacks an identity")
+    if steps[compact_index].get("canary_id") != canary_id:
+        fail("compaction boundary did not preserve the recorded canary identity")
+
+    related_user_indexes = [
+        index for index, step in enumerate(steps[compact_index + 1:], start=compact_index + 1)
+        if step["event"] == "user"
+        and {
+            "related_delta_after_compaction", "no_explicit_skill_resume_needed",
+            "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE",
+        }.issubset(step["expect"])
+    ]
+    if not related_user_indexes:
+        fail("verified native compaction lacks a later ordinary related user delta")
+
+    first_user_index = related_user_indexes[0]
+    coordinator_required = {
+        "continue_same_session", "no_new_activation", "canary_verified",
+        "execute_authorized_read_only_check", "ACTIVE",
+    }
+    verification_indexes = [
+        index for index, step in enumerate(steps)
+        if "canary_verified" in step["expect"]
+    ]
+    if len(verification_indexes) != 1:
+        fail("compaction canary must be verified exactly once")
+    verification_index = verification_indexes[0]
+    verification_step = steps[verification_index]
+    if (
+        verification_index <= first_user_index
+        or verification_step["event"] != "coordinator"
+        or not coordinator_required.issubset(verification_step["expect"])
+    ):
+        fail("verified native compaction lacks ordered post-compaction verification")
+    if verification_step.get("canary_id") != canary_id:
+        fail("post-compaction verification used a different canary identity")
+
+
+INTEGRATION_TOKENS = {
+    "integrate_completed_work", "integrate_isolated_stream", "worktree_integrated",
+    "integration_complete", "coordinator_integrates", "integration", "writer_integration",
+}
+
+
+def validate_writer_integrations(transcript: dict[str, object]) -> None:
+    """Require one terminal, audited isolated writer per integration operation."""
+    transcript_id = transcript["id"]
+    steps = transcript["steps"]
+    dispatches_by_id = {
+        dispatch["id"]: dispatch for dispatch in transcript.get("writer_dispatches", [])
+    }
+    already_integrated: set[str] = set()
+    for index, step in enumerate(steps, start=1):
+        markers = INTEGRATION_TOKENS.intersection(step["expect"])
+        writer_ids = step.get("integrated_writer_ids")
+        if not markers:
+            if writer_ids is not None:
+                fail(f"integrated writer ids appear without an integration operation: {transcript_id}")
+            continue
+        if (
+            step["event"] != "coordinator"
+            or not isinstance(writer_ids, list)
+            or len(writer_ids) != 1
+            or not isinstance(writer_ids[0], str)
+            or not writer_ids[0]
+        ):
+            fail(f"integration must name exactly one writer: {transcript_id}")
+
+        writer_id = writer_ids[0]
+        dispatch = dispatches_by_id.get(writer_id)
+        if (
+            dispatch is None
+            or dispatch["isolation"] != "worktree"
+            or dispatch["step"] >= index
+            or writer_id in already_integrated
+        ):
+            fail(f"integration names an invalid isolated writer: {transcript_id}")
+
+        terminal_token = f"{writer_id}_terminal"
+        audited_token = f"{writer_id}_audited"
+        terminal_indexes = [
+            prior_index
+            for prior_index, prior in enumerate(steps[:index - 1], start=1)
+            if dispatch["step"] < prior_index
+            and prior["event"] in {"worker_result", "notification_wake", "delivery_batch"}
+            and terminal_token in prior["expect"]
+        ]
+        audit_indexes = [
+            prior_index
+            for prior_index, prior in enumerate(steps[:index - 1], start=1)
+            if prior["event"] == "coordinator" and audited_token in prior["expect"]
+        ]
+        if not any(terminal < audit for terminal in terminal_indexes for audit in audit_indexes):
+            fail(f"writer integrated before terminal result and coordinator audit: {transcript_id}")
+        already_integrated.add(writer_id)
+
+
+def validate_dirty_path_flow(transcript: dict[str, object]) -> None:
+    transcript_id = transcript["id"]
+    steps = transcript["steps"]
+    validate_writer_integrations(transcript)
+    conflicts = transcript.get("dirty_conflicts")
+    block_required = {
+        "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
+        "shared_writer_overlap_blocked", "dirty_integration_blocked",
+        "narrow_ownership_or_approved_worktree", "no_silent_worktree",
+    }
+    block_markers = {
+        "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
+        "shared_writer_overlap_blocked", "dirty_integration_blocked",
+        "narrow_ownership_or_approved_worktree",
+    }
+    block_steps: set[int] = set()
+    for index, step in enumerate(steps, start=1):
+        tokens = set(step["expect"])
+        if block_markers.intersection(tokens):
+            scope_required = {"remain_ACTIVE"} if transcript["scope"] == "live" else {"one_shot_dirty_overlap_blocked"}
+            if step["event"] != "coordinator" or not (block_required | scope_required).issubset(tokens):
+                fail(f"incomplete dirty-path ownership block: {transcript_id}")
+            block_steps.add(index)
+
+    if conflicts is None:
+        if block_steps:
+            fail(f"dirty-path block lacks structural conflict data: {transcript_id}")
+        return
+    if not isinstance(conflicts, list) or not conflicts:
+        fail(f"dirty_conflicts must be a non-empty list: {transcript_id}")
+
+    recorded_steps: set[int] = set()
+    conflicts_by_step: dict[int, tuple[int, set[str], set[str]]] = {}
+    for conflict in conflicts:
+        if not isinstance(conflict, dict) or set(conflict) != {
+            "step", "dirty_since_step", "dirty_paths", "planned_owned_paths",
+        }:
+            fail(f"invalid dirty-path conflict: {transcript_id}")
+        step_number = conflict["step"]
+        if not isinstance(step_number, int) or step_number not in block_steps or step_number in recorded_steps:
+            fail(f"dirty-path conflict step does not match its block: {transcript_id}")
+        dirty_since_step = conflict["dirty_since_step"]
+        if not isinstance(dirty_since_step, int) or not 1 <= dirty_since_step <= step_number:
+            fail(f"dirty-path conflict has an invalid onset step: {transcript_id}")
+        dirty_paths = conflict["dirty_paths"]
+        planned_paths = conflict["planned_owned_paths"]
+        if not isinstance(dirty_paths, list) or not dirty_paths or not isinstance(planned_paths, list) or not planned_paths:
+            fail(f"dirty-path conflict lacks paths: {transcript_id}")
+        canonical_dirty = {canonical_owned_path(path) for path in dirty_paths}
+        canonical_planned = {canonical_owned_path(path) for path in planned_paths}
+        if len(canonical_dirty) != len(dirty_paths) or len(canonical_planned) != len(planned_paths):
+            fail(f"dirty-path conflict contains duplicate aliases: {transcript_id}")
+        if not canonical_dirty.intersection(canonical_planned):
+            fail(f"dirty-path conflict does not overlap planned ownership: {transcript_id}")
+        recorded_steps.add(step_number)
+        conflicts_by_step[step_number] = (dirty_since_step, canonical_dirty, canonical_planned)
+    if recorded_steps != block_steps:
+        fail(f"dirty-path blocks and structural conflicts differ: {transcript_id}")
+
+    dispatches_by_step: dict[int, list[dict[str, object]]] = {}
+    dispatches_by_id: dict[str, dict[str, object]] = {}
+    canonical_paths_by_id: dict[str, set[str]] = {}
+    for dispatch in transcript.get("writer_dispatches", []):
+        dispatches_by_step.setdefault(dispatch["step"], []).append(dispatch)
+        dispatches_by_id[dispatch["id"]] = dispatch
+        canonical_paths_by_id[dispatch["id"]] = {
+            canonical_owned_path(path) for path in dispatch["owned_paths"]
+        }
+    terminal_step_by_id: dict[str, int | None] = {}
+    integration_step_by_id: dict[str, int] = {}
+    for writer_id, dispatch in dispatches_by_id.items():
+        terminal_token = f"{writer_id}_terminal"
+        terminal_step_by_id[writer_id] = next(
+            (
+                step_index
+                for step_index, step in enumerate(steps, start=1)
+                if step_index > dispatch["step"]
+                and step["event"] in {"worker_result", "notification_wake", "delivery_batch"}
+                and terminal_token in step["expect"]
+            ),
+            None,
+        )
+    for step_index, step in enumerate(steps, start=1):
+        if INTEGRATION_TOKENS.intersection(step["expect"]):
+            integration_step_by_id[step["integrated_writer_ids"][0]] = step_index
+
+    protected_dirty_paths: set[str] = set()
+    unresolved_conflict_paths: set[str] = set()
+    pending_isolated_overlap_paths: set[str] = set()
+    for index, step in enumerate(steps, start=1):
+        tokens = set(step["expect"])
+        if index in conflicts_by_step:
+            dirty_since_step, dirty_paths, planned_paths = conflicts_by_step[index]
+            protected_dirty_paths.update(dirty_paths)
+            unresolved_conflict_paths.update(dirty_paths.intersection(planned_paths))
+            for earlier_dispatch in transcript.get("writer_dispatches", []):
+                if earlier_dispatch["step"] >= index:
+                    continue
+                overlap = canonical_paths_by_id[earlier_dispatch["id"]].intersection(dirty_paths)
+                if not overlap:
+                    continue
+                if earlier_dispatch["isolation"] == "shared":
+                    terminal_step = terminal_step_by_id[earlier_dispatch["id"]]
+                    if terminal_step is None or terminal_step >= dirty_since_step:
+                        fail(f"dirty path appeared while an overlapping shared writer was active: {transcript_id}")
+                elif integration_step_by_id.get(earlier_dispatch["id"], index) >= dirty_since_step:
+                    pending_isolated_overlap_paths.update(overlap)
+            for integration_index, integration_step in enumerate(steps[:index - 1], start=1):
+                if (
+                    integration_index < dirty_since_step
+                    or not INTEGRATION_TOKENS.intersection(integration_step["expect"])
+                ):
+                    continue
+                writer_id = integration_step["integrated_writer_ids"][0]
+                if canonical_paths_by_id[writer_id].intersection(dirty_paths):
+                    fail(f"dirty-path conflict was detected after an overlapping isolated integration: {transcript_id}")
+
+        resolution_tokens = {
+            "ownership_narrowed_away_from_dirty_paths",
+            "user_authorized_dirty_path_write",
+            "dirty_changes_reconciled_for_integration",
+        }.intersection(tokens)
+        if "dirty_overlap_resolved" in tokens:
+            if not unresolved_conflict_paths or len(resolution_tokens) != 1:
+                fail(f"invalid dirty-path resolution: {transcript_id}")
+            if "ownership_narrowed_away_from_dirty_paths" in resolution_tokens and step["event"] != "coordinator":
+                fail(f"dirty-path narrowing is not coordinator-audited: {transcript_id}")
+            if "user_authorized_dirty_path_write" in resolution_tokens and step["event"] != "user":
+                fail(f"dirty-path write authorization is not user-authored: {transcript_id}")
+            if "dirty_changes_reconciled_for_integration" in resolution_tokens and step["event"] != "coordinator":
+                fail(f"dirty-path reconciliation is not coordinator-audited: {transcript_id}")
+            if "ownership_narrowed_away_from_dirty_paths" in resolution_tokens:
+                if pending_isolated_overlap_paths.intersection(unresolved_conflict_paths):
+                    fail(f"ownership narrowing cannot erase produced isolated overlap: {transcript_id}")
+                unresolved_conflict_paths.clear()
+            else:
+                field = (
+                    "authorized_dirty_paths"
+                    if "user_authorized_dirty_path_write" in resolution_tokens
+                    else "reconciled_dirty_paths"
+                )
+                scoped_paths = step.get(field)
+                if not isinstance(scoped_paths, list) or not scoped_paths:
+                    fail(f"dirty-path resolution lacks scoped paths: {transcript_id}")
+                canonical_scoped = {canonical_owned_path(path) for path in scoped_paths}
+                if len(canonical_scoped) != len(scoped_paths) or not canonical_scoped.issubset(protected_dirty_paths):
+                    fail(f"dirty-path resolution names invalid scoped paths: {transcript_id}")
+                protected_dirty_paths.difference_update(canonical_scoped)
+                unresolved_conflict_paths.difference_update(canonical_scoped)
+                pending_isolated_overlap_paths.difference_update(canonical_scoped)
+        elif resolution_tokens:
+            fail(f"dirty-path resolution lacks an explicit state transition: {transcript_id}")
+
+        if "writer_dispatch" in tokens:
+            dispatches = dispatches_by_step.get(index, [])
+            for dispatch in dispatches:
+                canonical_owned = canonical_paths_by_id[dispatch["id"]]
+                overlap = canonical_owned.intersection(protected_dirty_paths)
+                if dispatch["isolation"] == "shared" and overlap:
+                    fail(f"shared writer overlaps protected dirty user paths: {transcript_id}")
+                if dispatch["isolation"] == "worktree":
+                    pending_isolated_overlap_paths.update(overlap)
+
+        integration_markers = INTEGRATION_TOKENS.intersection(tokens)
+        if integration_markers:
+            writer_id = step["integrated_writer_ids"][0]
+            overlap = canonical_paths_by_id[writer_id].intersection(protected_dirty_paths)
+            if overlap:
+                fail(f"isolated work integrated over protected dirty user paths: {transcript_id}")
+
+
 def validate() -> None:
     text = SKILL.read_text(encoding="utf-8")
     metadata = frontmatter(text)
@@ -199,6 +790,8 @@ def validate() -> None:
         fail("skill name must use lowercase kebab-case")
     for phrase in (
         "EXPLICIT-ONLY",
+        "parallel native subagents for large coding, research, audit, migration, and cross-module tasks",
+        "Use only when the user explicitly names or invokes Relay Orchestra",
         "one-shot scope that deactivates in the same response without a close question",
         "run-scoped live session (the bare explicit default)",
         "later direct explicit close confirmation",
@@ -232,6 +825,10 @@ def validate() -> None:
         "`final_answer`",
         "host `task_complete`",
         "compaction, summarization, context replacement, resume, and notification wake",
+        "When native continuity is verified across compaction, preserve the same state, ledger, requirement revision, pending close identity, and controllable handles",
+        "accept the next related delta without a new Relay invocation",
+        "Only a yield that issued this token or already required explicit resume makes the next user turn request explicit skill activation",
+        "verified native continuity accepts an ordinary related user delta without reinvocation",
         "Treat unverified persistence or controllability as unavailable",
         "continue through worker completion, authorized dependent waves, integration, verification, and a completion candidate without requiring another user message",
         "resume natively on that wake",
@@ -258,6 +855,27 @@ def validate() -> None:
         "all controllable workers are closed",
         "distinct hand-back question",
         "Working without worktree isolation",
+        "Use the shared tree for read-only agents and plans with at most one active writer",
+        "Treat every pre-existing or unattributed dirty path as user-owned until it is audited",
+        "Recommend an approved worktree even for one writer when the tree is dirty, attribution is unreliable, independent builds are needed, or the work is long-running",
+        "it never authorizes integration over them",
+        "Any authorization must name the exact canonical dirty paths it covers and leaves every other dirty path protected",
+        "Re-inspect shared-tree status while a writer is nonterminal and before its result audit",
+        "A writer that was already terminal before the dirty change appeared does not create this race",
+        "Integrate exactly one isolated writer per operation, only after that writer is terminal and the coordinator has audited its result",
+        "Record the writer ID, re-inspect shared-tree status",
+        "Block only an overlapping stream; an independent stream may integrate",
+        "Ownership narrowing can resolve a planned overlap only before isolated work has produced changes on it",
+        "make one isolated worktree per concurrent writer the default execution plan",
+        "This planning default is not permission to create or use a worktree",
+        "While approval is pending, dispatch no writers that could run concurrently",
+        "record a distinct checkout ID and confirmed base revision for each isolated writer",
+        "shared writers have no checkout ID",
+        "If isolated worktrees are unavailable or declined, serialize writers in the shared tree",
+        "Start the next writer only after the previous writer is terminal and its actual changes are audited",
+        "Before every writer dispatch in any mode, record its exact owned paths plus the expected interfaces and invariants",
+        "They never permit concurrent ownership of the same path",
+        "do not prevent semantic, API, schema, external-state, or integration conflicts",
         "The skill imposes no fixed maximum",
         "fifteen agents",
         "Do not silently reduce",
@@ -293,6 +911,13 @@ def validate() -> None:
         "does not itself reload instructions or restore control of lost handles",
         "The coordinator remains the only dispatcher",
         "Leaf agents must not spawn agents or invoke orchestration skills",
+        "Before creating a writer worktree or invoking any writer handle, build one ownership map",
+        "Record each owned file as one canonical repository-root-relative POSIX path",
+        "For portable Windows behavior, reject reserved characters, device names, and components ending in a dot or space",
+        "Across the ownership map, each canonical path must belong to only one nonterminal or same-wave writer",
+        "a direct request for simultaneous same-file writers, an exact agent count, or worktree approval does not override it",
+        "Do not create or dispatch the second same-path writer",
+        "State the conflict and safe schedule before the first dispatch",
     )
     for phrase in required_skill:
         if phrase not in text:
@@ -335,6 +960,19 @@ def validate() -> None:
         "> [!WARNING]",
         "Delegated agents perform separate model work",
         "tokens or credits can be consumed quickly",
+        "Open-source Agent Skill for coordinating parallel AI agents",
+        "Codex, Claude Code, Gemini CLI, and other Agent Skills clients",
+        "separate Git worktree (a separate project checkout) for each editor",
+        "Relay never creates worktrees without asking",
+        "lists the exact files it may change and the behavior that must stay compatible",
+        "If worktrees are unavailable or declined, editing agents run one after another",
+        "If Relay cannot tell who made an existing change, it treats the file as yours",
+        "Relay still checks your changes before integration",
+        "Two agents never edit the same file path at the same time",
+        "Compacting the chat does not close Relay",
+        "Relay can continue only from a valid resume token that it issued earlier",
+        "Feedback and Support",
+        "Open a GitHub issue",
     ):
         if phrase not in readme:
             fail(f"README.md is missing {phrase!r}")
@@ -350,6 +988,12 @@ def validate() -> None:
         "coordinator remains `In Progress` and a message may wait up to one poll interval",
         "process newer input and delivered results before advancing dependent waves, integration, verification, and synthesis",
         "never use shell sleep, a single long blind block, or polling without active work or a next condition",
+        "Shared mode remains the default for read-only agents and at most one active writer",
+        "For two or more possible concurrent writers, plan one isolated checkout per writer by default",
+        "create none before explicit user approval",
+        "If worktrees are unavailable or declined, serialize writers",
+        "Integrate exactly one terminal, audited writer per operation",
+        "Name that writer, inspect the shared tree",
     ):
         if phrase not in platforms:
             fail(f"platforms.md is missing {phrase!r}")
@@ -446,7 +1090,11 @@ def validate() -> None:
             "default_live_scope", "ACTIVE", "responsive_session", "later_close_confirmation_required"
         },
         "one_shot_blocked_handoff": {
-            "one_shot_scope", "clear_incomplete_handoff", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
+            "one_shot_scope", "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
+            "shared_writer_overlap_blocked", "one_shot_dirty_overlap_blocked",
+            "clear_incomplete_handoff", "no_cross_turn_persistence",
+            "settle_controllable_workers_before_final_response", "controllable_workers_closed",
+            "no_close_question", "same_turn_deactivation", "OFF"
         },
         "no_auto_wake_continues_to_completion_candidate": {
             "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "dependent_waves", "integration", "verification", "completion_candidate", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition"
@@ -488,8 +1136,49 @@ def validate() -> None:
         "unexpected_lost_writer_handle": {
             "handle_lifecycle_unknown", "retain_exact_accounting", "tree_unstable", "freeze_repository_operations", "freeze_overlapping_writer_dispatch"
         },
-        "overlapping_writers": {"pause_before_dispatch", "recommend_worktree_or_serialization", "no_silent_worktree"},
-        "approved_worktrees": {"worktree_mode", "one_checkout_per_writer", "coordinator_integrates"},
+        "overlapping_writers": {
+            "pause_before_dispatch", "exclusive_path_ownership", "same_path_work_serialized",
+            "worktrees_do_not_relax_ownership", "no_silent_worktree"
+        },
+        "direct_same_path_concurrency_request": {
+            "ownership_map_before_dispatch", "same_path_overlap_detected",
+            "direct_concurrency_request_does_not_override_gate",
+            "second_same_path_writer_not_dispatched", "same_path_work_serialized",
+            "terminal_and_audited_before_reassignment"
+        },
+        "approved_worktrees": {
+            "worktree_mode", "one_checkout_per_writer", "predispatch_contracts_recorded",
+            "coordinator_integrates", "integrate_one_stream_at_a_time", "validate_contracts"
+        },
+        "single_writer_shared_boundary": {
+            "shared_tree_default", "at_most_one_active_writer", "predispatch_contracts_recorded",
+            "no_worktree_approval_needed"
+        },
+        "dirty_shared_tree_single_writer": {
+            "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
+            "shared_writer_overlap_blocked", "dirty_integration_blocked",
+            "narrow_ownership_or_approved_worktree",
+            "no_silent_worktree"
+        },
+        "disjoint_concurrent_writers_default_worktrees": {
+            "default_worktree_plan", "one_checkout_per_writer", "predispatch_contracts_recorded",
+            "checkout_dependency_build_cleanup_cost_disclosed", "explicit_worktree_approval_required",
+            "concurrent_writer_dispatch_paused", "no_silent_worktree"
+        },
+        "worktrees_declined_serializes_writers": {
+            "worktree_declined", "serialization_fallback", "shared_tree_serial_writers",
+            "writer_b_after_writer_a_terminal_and_audited", "no_concurrent_shared_writers",
+            "predispatch_contracts_recorded"
+        },
+        "worktrees_unavailable_serializes_writers": {
+            "worktrees_unavailable", "serialization_fallback", "shared_tree_serial_writers",
+            "writer_b_after_writer_a_terminal_and_audited", "no_concurrent_shared_writers",
+            "predispatch_contracts_recorded"
+        },
+        "worktrees_do_not_solve_semantic_conflicts": {
+            "exclusive_path_ownership", "expected_interfaces_and_invariants", "semantic_conflicts_remain",
+            "integrate_one_stream_at_a_time", "validate_contracts", "worktrees_not_semantic_isolation"
+        },
         "sole_dispatcher": {"coordinator_only_dispatcher", "leaf_agents_do_not_spawn", "no_nested_orchestration"},
         "one_agent": {"requested_total_1", "responsive_session"},
         "fifteen_agents": {"requested_total_15", "no_skill_cap", "account_all"},
@@ -506,6 +1195,12 @@ def validate() -> None:
             "session_token", "explicit_skill_resume", "structurally_valid_session_token",
             "token_accepted_as_supplied_state", "relative_staleness_not_independently_proven",
             "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"
+        },
+        "verified_native_compaction_continues_without_reinvocation": {
+            "manual_compaction", "native_continuity_verified", "pending_close_identity_preserved",
+            "canary_preserved", "remain_ACTIVE", "related_delta_after_compaction",
+            "no_explicit_skill_resume_needed", "cancel_pending_close", "continue_same_session",
+            "no_new_activation"
         },
         "compaction_without_continuity_freezes_work": {
             "compaction_boundary", "lifecycle_neutral", "continuity_loss", "freeze_dispatch_and_writes",
@@ -569,6 +1264,7 @@ def validate() -> None:
         "agent_handles_persist",
         "result_notifications",
         "notification_auto_wake",
+        "isolated_writer_checkouts",
     }
     states = {"ACTIVE", "STOPPING", "OFF"}
     events = {
@@ -580,7 +1276,8 @@ def validate() -> None:
 
     for transcript in transcripts:
         required_keys = {"id", "scope", "capabilities", "initial_state", "steps", "final_state"}
-        if set(transcript) != required_keys:
+        allowed_keys = required_keys | {"writer_dispatches", "dirty_conflicts"}
+        if not required_keys.issubset(transcript) or not set(transcript).issubset(allowed_keys):
             fail(f"invalid transcript scenario keys: {transcript!r}")
         transcript_id = transcript["id"]
         if transcript_id in transcript_ids:
@@ -605,7 +1302,10 @@ def validate() -> None:
         previous_turn = 0
         for step in transcript["steps"]:
             required_step = {"turn", "event", "detail", "expect"}
-            allowed_step = required_step | {"inputs"}
+            allowed_step = required_step | {
+                "inputs", "writer_ids", "canary_id", "authorized_dirty_paths",
+                "reconciled_dirty_paths", "integrated_writer_ids",
+            }
             if not required_step.issubset(step) or not set(step).issubset(allowed_step):
                 fail(f"invalid transcript step: {step!r}")
             if not isinstance(step["turn"], int) or step["turn"] < previous_turn:
@@ -622,6 +1322,10 @@ def validate() -> None:
                     fail(f"delivery_batch must contain one user and one worker result: {transcript_id}")
             elif "inputs" in step:
                 fail(f"inputs are only valid on delivery_batch: {transcript_id}")
+
+        validate_writer_dispatches(transcript)
+        validate_writer_continuation(transcript)
+        validate_dirty_path_flow(transcript)
 
         if transcript["scope"] == "one_shot":
             validate_one_shot(transcript, expectation_tokens)
@@ -649,7 +1353,7 @@ def validate() -> None:
             "handle_lifecycle_unknown", "retain_exact_accounting", "controllable_workers_closed",
             "shared_writer_live", "tree_unstable", "terminal_writers_confirmed", "unstable_handoff",
             "queued_input", "HELD_to_QUEUED", "route_followup", "dispatch_or_queue",
-            "dispatch", "dispatch_nonblocking", "dispatch_dependent_implementation",
+            "dispatch", "writer_dispatch", "dispatch_nonblocking", "dispatch_dependent_implementation",
             "dispatch_verification_wave", "delegate_after_local_phase", "bounded_wave",
             "ledger_generation_increment", "handle_accounting_changed", "tree_stability_changed",
             "queued_or_held_work_changed",
@@ -748,7 +1452,7 @@ def validate() -> None:
                 }
                 if event != "coordinator" or capabilities["notification_auto_wake"] or not required.issubset(tokens):
                     fail(f"queued notifications do not continue through native polling: {transcript_id}")
-            if "dispatch" in tokens and capabilities["result_notifications"] and not capabilities["notification_auto_wake"]:
+            if {"dispatch", "writer_dispatch"}.intersection(tokens) and capabilities["result_notifications"] and not capabilities["notification_auto_wake"]:
                 required = {
                     "notification_presence_not_wake_proof",
                     "no_notification_auto_wake",
@@ -756,6 +1460,9 @@ def validate() -> None:
                 }
                 if event != "coordinator" or not required.issubset(tokens):
                     fail(f"live dispatch omits continuous native polling: {transcript_id}")
+            if "writer_dispatch" in tokens:
+                if event != "coordinator" or state != "ACTIVE":
+                    fail(f"writer dispatch is not coordinator-authored while ACTIVE: {transcript_id}")
             if event == "notification_wake":
                 required = {"auto_wake_started_coordinator_turn", "resume_natively", "worker_result_delivered"}
                 if not capabilities["notification_auto_wake"] or not required.issubset(tokens):
@@ -1114,6 +1821,7 @@ def validate() -> None:
         "historical_normal_completion_remains_active",
         "host_final_and_task_complete_preserve_active",
         "compaction_preserves_active_session",
+        "verified_native_compaction_continues_without_reinvocation",
         "compaction_without_continuity_freezes_work",
         "stale_token_after_revision_is_rejected",
         "stale_token_after_ledger_generation_change",
@@ -1124,9 +1832,17 @@ def validate() -> None:
         "pending_close_question_is_not_duplicated",
         "workstream_stop_does_not_stop_relay",
         "local_phase_rechecks_delegation",
+        "concurrent_writers_wait_for_worktree_approval",
+        "declined_worktrees_serialize_writers",
+        "unavailable_worktrees_serialize_writers",
+        "direct_same_path_concurrency_request_is_serialized",
+        "dirty_tree_overlap_blocks_single_writer",
     }
     if not required_transcripts.issubset(transcript_ids):
         fail("missing required transcript scenario")
+    validate_unavailable_worktrees(transcripts)
+    validate_direct_same_path_request_serialized(transcripts)
+    validate_verified_native_compaction(transcripts)
     continuous = next(
         transcript for transcript in transcripts
         if transcript["id"] == "no_auto_wake_continues_through_completion_candidate"
@@ -1274,6 +1990,16 @@ def validate() -> None:
         "task_complete_boundary",
         "lifecycle_neutral",
         "compaction_boundary",
+        "manual_compaction",
+        "skill_instructions_preserved",
+        "ledger_preserved",
+        "pending_close_identity_preserved",
+        "canary_preserved",
+        "related_delta_after_compaction",
+        "no_explicit_skill_resume_needed",
+        "continue_same_session",
+        "canary_verified",
+        "execute_authorized_read_only_check",
         "preserve_state_scope_ledger_accounting",
         "native_continuity_verified",
         "continuation_requires_explicit_resume",
@@ -1323,11 +2049,49 @@ def validate() -> None:
         "remain_local",
         "no_dispatch",
         "no_mandatory_fanout",
+        "predispatch_contracts_recorded",
+        "default_worktree_plan",
+        "checkout_dependency_build_cleanup_cost_disclosed",
+        "explicit_worktree_approval_required",
+        "concurrent_writer_dispatch_paused",
+        "worktrees_approved",
+        "worktrees_created_with_approval",
+        "writer_dispatch",
+        "exclusive_path_ownership",
+        "expected_interfaces_and_invariants",
+        "integrate_one_stream_at_a_time",
+        "validate_contracts",
+        "worktree_declined",
+        "serialization_fallback",
+        "shared_tree_serial_writers",
+        "only_one_active_writer",
+        "no_concurrent_shared_writers",
+        "writer_api_terminal",
+        "writer_api_audited",
+        "writer_b_after_writer_a_terminal_and_audited",
+        "ownership_map_before_dispatch",
+        "same_path_overlap_detected",
+        "direct_concurrency_request_does_not_override_gate",
+        "worktree_approval_does_not_override_same_path_exclusivity",
+        "second_same_path_writer_not_dispatched",
+        "same_path_work_serialized",
+        "terminal_and_audited_before_reassignment",
+        "same_path_reassigned_after_terminal_audit",
+        "dirty_tree_detected",
+        "unattributed_dirty_paths_user_owned",
+        "shared_writer_overlap_blocked",
+        "dirty_integration_blocked",
+        "narrow_ownership_or_approved_worktree",
+        "ownership_narrowed_away_from_dirty_paths",
+        "dirty_overlap_resolved",
     ):
         if token not in expectation_tokens:
             fail(f"transcripts are missing {token!r} expectation")
 
-    for relative in ("scripts/install.py", "install.sh", "install.ps1", "tests/test_install.py"):
+    for relative in (
+        "scripts/install.py", "install.sh", "install.ps1",
+        "tests/test_install.py", "tests/test_validate.py",
+    ):
         if not (ROOT / relative).is_file():
             fail(f"missing repository file: {relative}")
 

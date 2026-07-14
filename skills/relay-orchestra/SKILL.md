@@ -1,6 +1,6 @@
 ---
 name: relay-orchestra
-description: EXPLICIT-ONLY coordination of parallel native subagents with either one-shot scope that deactivates in the same response without a close question, or a run-scoped live session (the bare explicit default) that stays active until a later direct explicit close confirmation or an explicit stop.
+description: EXPLICIT-ONLY. Coordinates parallel native subagents for large coding, research, audit, migration, and cross-module tasks. Use only when the user explicitly names or invokes Relay Orchestra. Supports one-shot scope that deactivates in the same response without a close question, or a run-scoped live session (the bare explicit default) that stays active until a later direct explicit close confirmation or an explicit stop.
 ---
 
 # Relay Orchestra
@@ -36,7 +36,7 @@ Zero active agents, settled handles, or an immediate blocking phase handled loca
 - `STOPPING`: freeze new dispatch, interrupt or settle workers, inspect partial writes, account for results, and prepare the final handoff.
 - `OFF`: no session work or worker result is silently absorbed. A new orchestration request must activate a new session.
 
-A host response or context boundary does not authorize a Relay lifecycle transition, although it may end the host turn, task, or retained context. This includes a normal response labeled `final` or `final_answer`, host `task_complete`, compaction, summarization, context replacement, resume, and notification wake. Apply response mutations and replacement-token issuance before checking boundary continuity. Continue through verified native continuity, or require explicit activation with a structurally valid token from the planned non-`OFF` yield. If a newer ledger generation survives, compare it and reject a stale token. If no comparator survives, accept the explicit token as supplied portable state without claiming comparison to lost state; relative staleness cannot be independently proven. If explicit resume is already required, later lifecycle-neutral host bookkeeping markers may be recorded without execution; keep work frozen and resume still required. Freeze dispatch and writes only when neither verified native state nor a valid explicit token is available, or when a surviving newer comparator proves the token stale. Never infer `OFF` from a boundary.
+A host response or context boundary does not authorize a Relay lifecycle transition, although it may end the host turn, task, or retained context. This includes a normal response labeled `final` or `final_answer`, host `task_complete`, compaction, summarization, context replacement, resume, and notification wake. Apply response mutations and replacement-token issuance before checking boundary continuity. Continue through verified native continuity, or require explicit activation with a structurally valid token from the planned non-`OFF` yield. When native continuity is verified across compaction, preserve the same state, ledger, requirement revision, pending close identity, and controllable handles; accept the next related delta without a new Relay invocation. If a newer ledger generation survives, compare it and reject a stale token. If no comparator survives, accept the explicit token as supplied portable state without claiming comparison to lost state; relative staleness cannot be independently proven. If explicit resume is already required, later lifecycle-neutral host bookkeeping markers may be recorded without execution; keep work frozen and resume still required. Freeze dispatch and writes only when neither verified native state nor a valid explicit token is available, or when a surviving newer comparator proves the token stale. Never infer `OFF` from a boundary.
 
 Apparent live-session completion does not enter `STOPPING`. Only a valid answer to a pending close question or a user-authored explicit stop while `ACTIVE` authorizes `ACTIVE -> STOPPING`; never move directly from `ACTIVE` to `OFF`. Move `STOPPING -> OFF` only after all controllable workers are closed and shared-tree writers are terminal. If a shared-tree writer cannot be controlled or confirmed terminal, remain `STOPPING`, mark the tree unstable, and prohibit repository operations. Close confirmation or an explicit stop authorizes only entry into `STOPPING`; after disclosing the live-writer risk, ask a distinct hand-back question and move to `OFF` with that writer live only after a later user-authored direct acceptance while `STOPPING`.
 
@@ -81,7 +81,7 @@ Check result notification and automatic coordinator wake separately. Notificatio
 
 If subagents are unavailable, offer sequential local execution or dispatch-ready briefs. Treat approval of that fallback as work authorization only, never as close confirmation. In one-shot scope, use only an already-authorized safe fallback or hand back instead of opening another turn for approval. If background continuation across turns is unavailable, disclose that interactive accumulation is limited and use short bounded waves. If lifecycle controls are incomplete, disclose the limitation before writer dispatch and prefer read-only or serialized work.
 
-Use seamless native continuity only when skill instructions and ledger state are verified to persist and every nonterminal handle remains controllable; zero nonterminal handles satisfies the handle condition. Treat unverified persistence or controllability as unavailable, and do not use conversation history as proof. For these rules, every response that returns control while Relay remains `ACTIVE` or `STOPPING` is a permitted yield, including a completion-candidate response. When skill or ledger persistence is unavailable, include a compact non-secret session token before that yield. After any such non-`OFF` yield, require the next user turn to request explicit skill activation with the portable payload below, unless a verified automatic wake can reload the skill and current state without user action. Otherwise treat auto-wake as unusable and keep the current turn in progress.
+Use seamless native continuity only when skill instructions and ledger state are verified to persist and every nonterminal handle remains controllable; zero nonterminal handles satisfies the handle condition. Treat unverified persistence or controllability as unavailable, and do not use conversation history as proof. For these rules, every response that returns control while Relay remains `ACTIVE` or `STOPPING` is a permitted yield, including a completion-candidate response. When skill or ledger persistence is unavailable, include a compact non-secret session token before that yield and mark explicit resume as required. Only a yield that issued this token or already required explicit resume makes the next user turn request explicit skill activation with the portable payload below; verified native continuity accepts an ordinary related user delta without reinvocation. Unless a verified automatic wake can reload the skill and current state without user action, treat auto-wake as unusable while explicit resume is required and keep the current turn in progress.
 
     resume <token>: <next instruction>
 
@@ -133,7 +133,7 @@ Track:
 - pending close confirmation, its audited requirement revision, issued question, and coordinator turn
 - continuity support for result delivery, automatic wake, skill instructions, ledger, and agent handles; fallback token when needed
 - count mode, exact ceiling when set, and distinct successfully created handles
-- agent ID when available, stable functional role, optional client nickname, work status, handle state, context value, ownership, and isolation
+- agent ID when available, stable functional role, optional client nickname, work status, handle state, context value, exact owned paths for writers, expected interfaces and invariants, and isolation
 - active, queued, held, superseded, failed, and completed work
 - confirmed decisions and evidence
 - shared-tree stability and changed-path ownership
@@ -211,15 +211,39 @@ Prefer this progression for product work:
 
 The coordinator remains the only dispatcher. Leaf agents must not spawn agents or invoke orchestration skills.
 
+### Mandatory Writer Ownership Gate
+
+Before creating a writer worktree or invoking any writer handle, build one ownership map covering every nonterminal writer and every writer planned for the current wave. Then:
+
+1. Record each owned file as one canonical repository-root-relative POSIX path, never as an absolute, worktree-specific, glob, directory, or `.`/`..` path.
+2. Resolve Unicode normalization, hardlink, symlink, and case aliases against the repository to one logical identity before comparing paths.
+3. For portable Windows behavior, reject reserved characters, device names, and components ending in a dot or space.
+4. Across the ownership map, each canonical path must belong to only one nonterminal or same-wave writer.
+
+If any path overlaps, concurrent dispatch is forbidden:
+
+- This is a pre-dispatch safety invariant, not a scheduling preference: a direct request for simultaneous same-file writers, an exact agent count, or worktree approval does not override it.
+- Do not create or dispatch the second same-path writer.
+- Keep the requested handles accounted for, but serialize the writers so the next starts only after the current owner is terminal and its actual changes are audited, or make one agent read-only and give one writer exclusive ownership.
+- State the conflict and safe schedule before the first dispatch. Worktrees never make same-path concurrency valid.
+
 ## Select Isolation
 
-Default to shared mode. At session start, unless worktrees were already approved, state in the user's language:
+Use the shared tree for read-only agents and plans with at most one active writer only when existing changes and new writes can be attributed safely. When that applies, state in the user's language:
 
     Working without worktree isolation. Agents share the current working tree, and file changes appear there immediately.
 
-Use the shared tree for read-only agents and clearly disjoint writers with reliable attribution. Never assign overlapping paths to concurrent shared-tree writers.
+Before any shared-tree writer dispatch, inspect repository status and the ownership map. Treat every pre-existing or unattributed dirty path as user-owned until it is audited. Do not assign a shared-tree writer to those paths without explicit user authorization; narrow ownership, serialize after a safe handoff, or offer an isolated worktree. Any authorization must name the exact canonical dirty paths it covers and leaves every other dirty path protected. Recommend an approved worktree even for one writer when the tree is dirty, attribution is unreliable, independent builds are needed, or the work is long-running. If isolation is declined, preserve user-owned dirty paths and do not dispatch overlapping work.
 
-Do not switch to worktree mode silently. Recommend serialization, narrower ownership, or worktrees when the tree is dirty, paths overlap, attribution is unreliable, independent builds are needed, or writers are long-running. Use one isolated checkout per concurrent writer only after explicit approval. Before creation, disclose that a worktree shares Git history but duplicates checked-out files and may duplicate local dependencies or build outputs; account for repository size and available disk space. A branch in one checkout is not isolation.
+Re-inspect shared-tree status while a writer is nonterminal and before its result audit. If a user-owned or unattributed change appears on that writer's owned path, interrupt the writer when possible, mark the tree unstable, and freeze overlapping writes and integration until the changes are reconciled. A writer that was already terminal before the dirty change appeared does not create this race. An isolated writer may finish, but its overlapping integration remains blocked.
+
+When two or more agents could write at the same time, make one isolated worktree per concurrent writer the default execution plan. This planning default is not permission to create or use a worktree. Do not switch to worktree mode silently.
+
+Before creation, disclose that each worktree shares Git history but duplicates checked-out files, may duplicate local dependencies or build outputs, and leaves temporary checkouts that require cleanup. Account for repository size and available disk space, then obtain explicit user approval. After approval, record a distinct checkout ID and confirmed base revision for each isolated writer; shared writers have no checkout ID. While approval is pending, dispatch no writers that could run concurrently. A branch in one checkout is not isolation.
+
+If isolated worktrees are unavailable or declined, serialize writers in the shared tree. Start the next writer only after the previous writer is terminal and its actual changes are audited. Before every writer dispatch in any mode, record its exact owned paths plus the expected interfaces and invariants shared with other workstreams, then pass the mandatory ownership gate above.
+
+Worktrees isolate checked-out files, not intent. They never permit concurrent ownership of the same path and do not prevent semantic, API, schema, external-state, or integration conflicts. An approved worktree may isolate writer execution from dirty user paths, but it never authorizes integration over them. Integrate exactly one isolated writer per operation, only after that writer is terminal and the coordinator has audited its result. Record the writer ID, re-inspect shared-tree status, and compare that writer's exact canonical owned paths against the currently protected dirty paths. Block only an overlapping stream; an independent stream may integrate. Ownership narrowing can resolve a planned overlap only before isolated work has produced changes on it. After that, keep integration blocked until the user authorizes the exact dirty paths or the coordinator explicitly reconciles those exact paths. Validate recorded interfaces and invariants before and after integration.
 
 When a new instruction changes ownership, interrupt or finish the current owner before reassigning its paths. Audit live shared-tree changes first. Shared changes are already applied; isolated changes are integrated one stream at a time by the coordinator.
 
@@ -235,7 +259,10 @@ State the current concrete outcome and requirement revision.
 Provide confirmed facts and relevant prior decisions.
 
 ## Scope And Ownership
-Name the questions, paths, or partition owned by this agent.
+Name the questions or read-only partition. For a writer, list every exact owned path and confirm the pre-dispatch ownership map has no overlap with a nonterminal or same-wave writer.
+
+## Interfaces And Invariants
+Record expected contracts with other workstreams and assumptions that must remain true.
 
 ## Isolation
 State read-only, shared, or isolated; include the base revision when relevant.

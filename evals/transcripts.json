@@ -2,26 +2,30 @@
   {
     "id": "no_auto_wake_continues_through_completion_candidate",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Explicitly start a live session with exactly two agents.", "expect": ["live_scope", "OFF_to_ACTIVE", "EXACT_2"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch research and begin a native short bounded completion poll because notifications do not wake the coordinator.", "expect": ["dispatch", "shared_announcement", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "user", "detail": "Explicitly start a live session with exactly two agents and approve an isolated checkout for the later writer.", "expect": ["live_scope", "OFF_to_ACTIVE", "EXACT_2", "worktrees_approved"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record the planned writer contract, create its approved worktree, dispatch read-only research, and begin a native short bounded completion poll because notifications do not wake the coordinator.", "expect": ["predispatch_contracts_recorded", "worktrees_created_with_approval", "dispatch", "shared_announcement", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
       {"turn": 1, "event": "wait_timeout", "detail": "The short interval ends while research is still active.", "expect": ["short_poll_timeout", "still_running_state_reported", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "active_work_remains", "specific_next_condition", "repeat_bounded_poll", "remain_ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "With no newer input or delivered result and active research remaining, begin the next bounded interval.", "expect": ["native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
       {"turn": 1, "event": "delivery_batch", "detail": "Research completes as a newer compatible user delta arrives, ending the interval for ordered processing.", "inputs": [{"kind": "worker_result", "source": "research", "detail": "Research dependency completes."}, {"kind": "user", "detail": "Apply the new compatibility requirement during implementation."}], "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "user_delta_first", "queued_input", "HELD_to_QUEUED", "reuse_within_EXACT_2", "worker_result_delivered", "research_completed", "ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Record the delta, synthesize research, dispatch the authorized dependent implementation, and begin another bounded interval.", "expect": ["revision_increment", "same_turn_receipt", "synthesize_research", "dispatch_dependent_implementation", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
-      {"turn": 1, "event": "worker_result", "detail": "Implementation completes during the interval, which ends for result processing.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "implementation_completed", "ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Integrate the completed implementation, dispatch authorized verification, and begin another bounded interval.", "expect": ["integrate_completed_work", "dispatch_verification_wave", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record the delta, synthesize research, dispatch the authorized dependent implementation writer, and begin another bounded interval.", "expect": ["revision_increment", "same_turn_receipt", "synthesize_research", "dispatch_dependent_implementation", "writer_dispatch", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_implementation"]},
+      {"turn": 1, "event": "worker_result", "detail": "The implementation writer completes during the interval, which ends for result processing.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "implementation_completed", "writer_implementation_terminal", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit the terminal implementation writer and its recorded contract before integration.", "expect": ["writer_implementation_audited", "validate_contracts", "ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Integrate only the audited implementation stream, dispatch authorized verification, and begin another bounded interval.", "expect": ["integrate_completed_work", "dispatch_verification_wave", "no_user_or_manual_wake_dependency", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "integrated_writer_ids": ["writer_implementation"]},
       {"turn": 1, "event": "worker_result", "detail": "Verification completes during the interval, which ends for result processing.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "verification_completed", "ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "Synthesize verification, audit the latest revision, present the completion candidate, ask to close, and remain active.", "expect": ["synthesize_verification", "final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_implementation", "step": 6, "owned_paths": ["src/implementation.ts"], "interfaces_invariants": ["Implementation preserves the synthesized compatibility contract"], "isolation": "worktree", "checkout_id": "wt-implementation", "base_revision": "abc123", "after_terminal_and_audited": []}
     ],
     "final_state": "ACTIVE"
   },
   {
     "id": "auto_wake_dispatch_resumes_coordinator",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": true},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": true, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Dispatch non-blocking work and yield because the host confirms notification-triggered coordinator wake.", "expect": ["dispatch_nonblocking", "result_notifications", "notification_auto_wake", "yield_main_turn", "ACTIVE"]},
@@ -33,7 +37,7 @@
   {
     "id": "explicit_pause_or_yield_is_one_off",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Yield Relay Orchestra until I return with my next related instruction.", "expect": ["explicit_pause_or_yield", "ordinary_one_off_instruction"]},
@@ -46,35 +50,42 @@
   {
     "id": "explicit_one_shot_bounded_completion",
     "scope": "one_shot",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra for this message only; run a reviewer, then an already-authorized dependent verifier, and synthesize once.", "expect": ["one_shot_scope"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch the reviewer, disclose once that the originating turn stays In Progress and input may wait up to one interval, then begin native short bounded completion polling.", "expect": ["bounded_wave", "native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "same_coordinator_turn", "bound_to_originating_message_and_final_response", "no_arbitrary_poll_deadline", "stop_for_terminal_results_and_synthesis", "stop_for_user_cancel_or_redirect", "stop_for_user_specified_overall_limit", "stop_for_genuine_runtime_blocker", "no_later_user_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition"]},
+      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra for this message only; run one documentation writer, then an already-authorized dependent verifier, and synthesize once.", "expect": ["one_shot_scope"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record the writer's exact file ownership and interface contract before dispatch.", "expect": ["predispatch_contracts_recorded"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch the documentation writer, disclose once that the originating turn stays In Progress and input may wait up to one interval, then begin native short bounded completion polling.", "expect": ["bounded_wave", "writer_dispatch", "native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "same_coordinator_turn", "bound_to_originating_message_and_final_response", "no_arbitrary_poll_deadline", "stop_for_terminal_results_and_synthesis", "stop_for_user_cancel_or_redirect", "stop_for_user_specified_overall_limit", "stop_for_genuine_runtime_blocker", "no_later_user_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition"], "writer_ids": ["writer_docs"]},
       {"turn": 1, "event": "wait_timeout", "detail": "The first short interval expires while the reviewer remains healthy; process newer input and delivered results, inspect the worker, and schedule another interval.", "expect": ["short_poll_timeout", "poll_timeout_is_scheduling_tick", "poll_timeout_not_task_deadline", "still_running_state_reported", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "active_work_remains", "specific_next_condition", "healthy_workers_not_interrupted", "repeat_bounded_poll", "same_coordinator_turn", "no_deactivation_on_interval_timeout"]},
       {"turn": 1, "event": "coordinator", "detail": "With no newer input or result and the reviewer still healthy, begin the next short bounded interval in the same turn.", "expect": ["native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "active_work_and_next_condition_required", "same_coordinator_turn", "no_repeat_disclosure", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition"]},
-      {"turn": 1, "event": "worker_result", "detail": "The reviewer completes, so process its result and advance the already-authorized dependent verifier.", "expect": ["result_available", "newer_input_checked_before_result", "worker_result_delivered", "reviewer_terminal", "authorized_dependent_work_remains", "same_coordinator_turn"]},
+      {"turn": 1, "event": "worker_result", "detail": "The documentation writer completes, so process its result and advance the already-authorized dependent verifier.", "expect": ["result_available", "newer_input_checked_before_result", "worker_result_delivered", "writer_docs_terminal", "authorized_dependent_work_remains", "same_coordinator_turn"]},
       {"turn": 1, "event": "coordinator", "detail": "Dispatch the dependent verifier and begin another short bounded completion interval in the originating turn.", "expect": ["process_delivered_result", "dispatch_authorized_dependent_work", "dependent_wave", "native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "active_work_and_next_condition_required", "same_coordinator_turn", "no_repeat_disclosure", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition"]},
       {"turn": 1, "event": "worker_result", "detail": "The dependent verifier completes during the later interval.", "expect": ["result_available", "newer_input_checked_before_result", "worker_result_delivered", "workers_terminal", "same_coordinator_turn"]},
       {"turn": 1, "event": "coordinator", "detail": "Synthesize and audit both results, settle every controllable worker, report, and deactivate in the one-shot final response.", "expect": ["final_audit", "workers_terminal", "synthesis_complete", "stop_for_terminal_results_and_synthesis", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "one_shot_complete", "no_close_question", "same_turn_deactivation", "OFF"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_docs", "step": 3, "owned_paths": ["docs/one-shot.md"], "interfaces_invariants": ["The documented one-shot contract remains compatible with the verifier"], "isolation": "shared", "after_terminal_and_audited": []}
     ],
     "final_state": "OFF"
   },
   {
     "id": "one_shot_blocked_handoff",
     "scope": "one_shot",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra one time for an action requiring unavailable authorization.", "expect": ["one_shot_scope"]},
-      {"turn": 1, "event": "coordinator", "detail": "Report what could not be completed, settle any controllable worker, and deactivate without asking to close.", "expect": ["capability_or_authorization_blocked", "clear_incomplete_handoff", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"]}
+      {"turn": 1, "event": "user", "detail": "Use Relay Orchestra one time with a writer whose planned file already contains unattributed changes.", "expect": ["one_shot_scope"]},
+      {"turn": 1, "event": "coordinator", "detail": "Treat the dirty file as user-owned, block the overlapping writer without waiting for another turn, report the incomplete handoff, and deactivate.", "expect": ["dirty_tree_detected", "unattributed_dirty_paths_user_owned", "shared_writer_overlap_blocked", "dirty_integration_blocked", "narrow_ownership_or_approved_worktree", "no_silent_worktree", "one_shot_dirty_overlap_blocked", "capability_or_authorization_blocked", "clear_incomplete_handoff", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"]}
+    ],
+    "dirty_conflicts": [
+      {"step": 2, "dirty_since_step": 1, "dirty_paths": ["src/dirty.swift"], "planned_owned_paths": ["src/dirty.swift"]}
     ],
     "final_state": "OFF"
   },
   {
     "id": "stop_during_shared_write_and_late_result",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "A shared-tree writer is active.", "expect": ["shared_writer_live"]},
@@ -89,7 +100,7 @@
   {
     "id": "persistence_fallback_continuous_bounded_waves",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly activate a multi-turn research session.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
@@ -102,7 +113,7 @@
   {
     "id": "bare_explicit_invocation_defaults_live_and_requires_later_close",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "$relay-orchestra run one reviewer.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
@@ -118,7 +129,7 @@
   {
     "id": "new_work_cancels_pending_close",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -130,7 +141,7 @@
   {
     "id": "close_confirmation_requires_separate_unstable_acceptance",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -144,7 +155,7 @@
   {
     "id": "pending_close_confirmation_fallback",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Settle leaf handles, present the audited completion candidate, ask to close, and emit a revision-bound token.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_live_handle_at_yield", "session_token", "portable_resume_payload", "ledger_generation_in_token", "pending_close_and_audited_revision_in_token"]},
@@ -158,7 +169,7 @@
   {
     "id": "fallback_approval_is_not_close_confirmation",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly activate Relay Orchestra for a read-only inspection.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
@@ -171,7 +182,7 @@
   {
     "id": "stale_close_confirmation_is_rejected",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -184,7 +195,7 @@
   {
     "id": "close_confirmation_races_material_result",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -196,7 +207,7 @@
   {
     "id": "ambiguous_and_mixed_replies_stay_active",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -210,7 +221,7 @@
   {
     "id": "unexpected_lost_writer_handle_remains_significant",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Explicitly request a one-off yield until I return while the shared-tree writer remains active.", "expect": ["explicit_pause_or_yield", "ordinary_one_off_instruction"]},
@@ -224,7 +235,7 @@
   {
     "id": "historical_normal_completion_remains_active",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "worker_result", "detail": "The historical read-only research wave finishes normally.", "expect": ["historical_normal_completion", "worker_result_delivered", "ACTIVE"]},
@@ -235,7 +246,7 @@
   {
     "id": "host_final_and_task_complete_preserve_active",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "host_final", "detail": "The host labels a normal live-session status response final_answer.", "expect": ["final_answer_boundary", "lifecycle_neutral", "native_continuity_verified", "no_closure_authorization", "preserve_ACTIVE", "remain_ACTIVE"]},
@@ -248,7 +259,7 @@
   {
     "id": "compaction_preserves_active_session",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Persistence is unverified, so treat it as unavailable and emit a compact token before returning control.", "expect": ["persistence_unverified", "treat_unverified_persistence_as_unavailable", "session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "preserve_state_scope_ledger_accounting", "remain_ACTIVE"]},
@@ -261,7 +272,7 @@
   {
     "id": "compaction_without_continuity_freezes_work",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "compaction", "detail": "The host compacts context before verified native state or a portable token is available.", "expect": ["compaction_boundary", "lifecycle_neutral", "continuity_loss", "freeze_dispatch_and_writes", "continuity_loss_disclosed", "no_restoration_claim", "never_infer_OFF", "remain_ACTIVE"]}
@@ -271,7 +282,7 @@
   {
     "id": "stale_token_after_revision_is_rejected",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Issue a token for the current ACTIVE revision with no live handles.", "expect": ["session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "remain_ACTIVE"]},
@@ -283,7 +294,7 @@
   {
     "id": "stale_token_after_ledger_generation_change",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Issue a token carrying the current ledger generation with no live handles.", "expect": ["session_token", "portable_resume_payload", "ledger_generation_in_token", "no_live_handle_at_yield", "remain_ACTIVE"]},
@@ -295,7 +306,7 @@
   {
     "id": "non_native_host_final_then_task_complete_resumes",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": false, "ledger_persists": false, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "host_final", "detail": "Create the completion candidate and replacement token before evaluating this non-native final boundary.", "expect": ["final_answer_boundary", "lifecycle_neutral", "post_response_boundary_freshness", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "session_token", "portable_resume_payload", "ledger_generation_in_token", "pending_close_and_audited_revision_in_token", "no_live_handle_at_yield", "continuation_requires_explicit_resume", "freeze_dispatch_and_writes", "no_restoration_claim", "remain_ACTIVE"]},
@@ -308,7 +319,7 @@
   {
     "id": "native_continuity_with_zero_handles",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "host_final", "detail": "The host ends a status response with no nonterminal handles in the ledger.", "expect": ["final_answer_boundary", "lifecycle_neutral", "zero_nonterminal_handles", "handle_continuity_vacuously_satisfied", "native_continuity_verified", "no_session_token", "no_closure_authorization", "preserve_ACTIVE", "remain_ACTIVE"]}
@@ -318,7 +329,7 @@
   {
     "id": "reinvocation_while_active_is_a_delta",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 2, "event": "user", "detail": "Invoke Relay Orchestra again while ACTIVE and add a worktree requirement.", "expect": ["reinvoke_while_ACTIVE", "preserve_state_scope_ledger_accounting", "accompanying_text_is_delta", "no_new_activation", "remain_ACTIVE"]},
@@ -329,7 +340,7 @@
   {
     "id": "reinvocation_while_stopping_preserves_shutdown",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "STOPPING",
     "steps": [
       {"turn": 2, "event": "user", "detail": "Invoke Relay Orchestra again while STOPPING and request a new audit.", "expect": ["reinvoke_while_STOPPING", "preserve_shutdown", "no_new_work_absorbed", "hand_back_after_OFF", "no_new_activation", "remain_STOPPING"]},
@@ -340,7 +351,7 @@
   {
     "id": "pending_close_question_is_not_duplicated",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Audit the current revision, present a completion candidate, and ask to close.", "expect": ["final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]},
@@ -351,7 +362,7 @@
   {
     "id": "workstream_stop_does_not_stop_relay",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 2, "event": "user", "detail": "Stop the calendar workstream but keep reviewing the rest.", "expect": ["work_item_stop", "no_session_stop_authorization", "no_closure_authorization", "remain_ACTIVE"]},
@@ -365,12 +376,120 @@
   {
     "id": "local_phase_rechecks_delegation",
     "scope": "live",
-    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false},
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "ACTIVE",
     "steps": [
       {"turn": 1, "event": "coordinator", "detail": "Handle an immediate blocking phase locally with no active leaf agents and report status.", "expect": ["zero_active_agents", "local_blocking_work", "explicit_ACTIVE_status", "no_deactivation", "remain_ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "At the next phase boundary, re-evaluate delegation; no distinct leaf work exists, so remain local without dispatch.", "expect": ["phase_boundary", "delegation_re_evaluated", "no_distinct_leaf_work", "remain_local", "no_dispatch", "no_mandatory_fanout", "remain_ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "At a later phase boundary, re-evaluate again and identify useful independent review work.", "expect": ["phase_boundary", "delegation_re_evaluated", "distinct_leaf_work_identified", "delegate_after_local_phase", "no_mandatory_fanout", "ACTIVE"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "concurrent_writers_wait_for_worktree_approval",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start a live Relay session with two agents that could write separate paths concurrently.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record each writer's exact paths, API contract, and invariant; choose one worktree per writer as the default plan; disclose checkout, dependency, build-output, and cleanup costs; request approval without dispatching either writer.", "expect": ["predispatch_contracts_recorded", "default_worktree_plan", "one_checkout_per_writer", "checkout_dependency_build_cleanup_cost_disclosed", "explicit_worktree_approval_required", "concurrent_writer_dispatch_paused", "no_silent_worktree", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "I explicitly approve one isolated worktree per writer.", "expect": ["worktrees_approved", "non_close_answer", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Create the approved worktrees and dispatch both writers with their recorded ownership and contracts, then begin native completion polling.", "expect": ["worktrees_created_with_approval", "worktree_mode", "one_checkout_per_writer", "writer_dispatch", "exclusive_path_ownership", "expected_interfaces_and_invariants", "integrate_one_stream_at_a_time", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_api", "writer_schema"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-api", "base_revision": "da1c1a5", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 4, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-schema", "base_revision": "da1c1a5", "after_terminal_and_audited": []}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "declined_worktrees_serialize_writers",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start a live Relay session with two agents that could write separate paths concurrently.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record exact ownership and contracts, choose worktrees as the default concurrent plan, disclose costs, and request approval without writer dispatch.", "expect": ["predispatch_contracts_recorded", "default_worktree_plan", "checkout_dependency_build_cleanup_cost_disclosed", "explicit_worktree_approval_required", "concurrent_writer_dispatch_paused", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Decline worktree creation and continue safely.", "expect": ["worktree_declined", "non_close_answer", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Use the shared-tree serialization fallback, dispatch only writer A, and begin native completion polling.", "expect": ["serialization_fallback", "shared_tree_serial_writers", "writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_api"]},
+      {"turn": 2, "event": "worker_result", "detail": "Writer A reaches a terminal state and returns its changes, ending the poll for result processing.", "expect": ["writer_api_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Audit writer A's actual changes before the next dispatch.", "expect": ["writer_api_audited", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Dispatch writer B with its recorded ownership and contracts, then resume native completion polling.", "expect": ["writer_dispatch", "writer_b_after_writer_a_terminal_and_audited", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_schema"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 7, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "dirty_tree_overlap_blocks_single_writer",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start Relay with one writer that may edit src/queue/ParseJobQueue.swift, where the working tree already contains unattributed changes.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Inspect repository status, treat the dirty path as user-owned, block overlapping shared-tree ownership, and offer narrower ownership or an explicitly approved worktree without creating or dispatching anything.", "expect": ["dirty_tree_detected", "unattributed_dirty_paths_user_owned", "shared_writer_overlap_blocked", "dirty_integration_blocked", "narrow_ownership_or_approved_worktree", "no_silent_worktree", "remain_ACTIVE"]},
+      {"turn": 2, "event": "user", "detail": "Keep the dirty queue file untouched and narrow the writer to clean/new.swift.", "expect": ["narrow_writer_ownership", "non_close_answer", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Rebuild the ownership map, confirm the new path is disjoint from dirty user-owned paths, resolve the dirty overlap, and record the writer contract.", "expect": ["ownership_narrowed_away_from_dirty_paths", "dirty_overlap_resolved", "predispatch_contracts_recorded", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Dispatch the narrowed shared-tree writer and begin native completion polling.", "expect": ["writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_clean"]}
+    ],
+    "dirty_conflicts": [
+      {"step": 2, "dirty_since_step": 1, "dirty_paths": ["src/queue/ParseJobQueue.swift"], "planned_owned_paths": ["src/queue/ParseJobQueue.swift"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_clean", "step": 5, "owned_paths": ["clean/new.swift"], "interfaces_invariants": ["Dirty queue changes remain untouched"], "isolation": "shared", "after_terminal_and_audited": []}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "verified_native_compaction_continues_without_reinvocation",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "ACTIVE",
+    "steps": [
+      {"turn": 1, "event": "coordinator", "detail": "Record a canary, audit the current revision, present a completion candidate, and ask to close while verified native continuity is available.", "expect": ["canary_recorded", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "native_continuity_verified", "no_session_token", "remain_ACTIVE"], "canary_id": "COMPACTION-CANARY-74"},
+      {"turn": 1, "event": "compaction", "detail": "The host manually compacts context while preserving the loaded skill, ledger, pending close identity, and canary.", "expect": ["manual_compaction", "compaction_boundary", "lifecycle_neutral", "native_continuity_verified", "skill_instructions_preserved", "ledger_preserved", "pending_close_identity_preserved", "canary_preserved", "no_stop_authorization", "never_infer_OFF", "remain_ACTIVE"], "canary_id": "COMPACTION-CANARY-74"},
+      {"turn": 2, "event": "user", "detail": "Send related work without re-invoking Relay; this is not permission to close.", "expect": ["related_delta_after_compaction", "no_explicit_skill_resume_needed", "cancel_pending_close", "no_closure_authorization", "remain_ACTIVE"]},
+      {"turn": 2, "event": "coordinator", "detail": "Advance the requirement revision, verify the canary, run the authorized read-only check, and continue the same session without new activation.", "expect": ["revision_increment", "continue_same_session", "no_new_activation", "canary_verified", "execute_authorized_read_only_check", "ACTIVE"], "canary_id": "COMPACTION-CANARY-74"}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "direct_same_path_concurrency_request_is_serialized",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start Relay with exactly two writer agents concurrently. Worktrees are approved, and both writers must edit src/queue/ParseJobQueue.swift at the same time.", "expect": ["live_scope", "OFF_to_ACTIVE", "worktrees_approved", "direct_same_path_concurrency_requested"]},
+      {"turn": 1, "event": "coordinator", "detail": "Build the ownership map before creating a worktree or writer handle, detect the exact-path collision, explain that neither the direct concurrency request nor worktree approval overrides exclusive ownership, and serialize the requested writers without dispatching the second writer.", "expect": ["predispatch_contracts_recorded", "ownership_map_before_dispatch", "same_path_overlap_detected", "direct_concurrency_request_does_not_override_gate", "worktree_approval_does_not_override_same_path_exclusivity", "second_same_path_writer_not_dispatched", "same_path_work_serialized", "serialization_fallback", "shared_tree_serial_writers", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch only the finalization writer in the shared tree and begin native completion polling while the cancellation writer remains held.", "expect": ["writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_finalization"]},
+      {"turn": 1, "event": "worker_result", "detail": "The finalization writer becomes terminal and returns its same-file changes.", "expect": ["writer_finalization_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit the finalization writer's actual changes before reassigning the same path.", "expect": ["writer_finalization_audited", "terminal_and_audited_before_reassignment", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch the cancellation writer in the shared tree only after the first writer is terminal and audited, then resume native completion polling.", "expect": ["writer_dispatch", "same_path_reassigned_after_terminal_audit", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_cancellation"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_finalization", "step": 3, "owned_paths": ["src/queue/ParseJobQueue.swift"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_cancellation", "step": 6, "owned_paths": ["src/queue/ParseJobQueue.swift"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": ["writer_finalization"]}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "unavailable_worktrees_serialize_writers",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": false},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start a live Relay session with two agents that could write separate paths concurrently.", "expect": ["live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Record exact ownership and contracts, detect that isolated writer checkouts are unavailable, and select shared-tree serialization.", "expect": ["predispatch_contracts_recorded", "default_worktree_plan", "worktrees_unavailable", "serialization_fallback", "shared_tree_serial_writers", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch only writer A in the shared tree and begin native completion polling.", "expect": ["writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_api"]},
+      {"turn": 1, "event": "worker_result", "detail": "Writer A reaches a terminal state and returns its changes, ending the poll for result processing.", "expect": ["writer_api_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit writer A's actual changes before the next dispatch.", "expect": ["writer_api_audited", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch writer B in the shared tree after writer A is terminal and audited, then resume native completion polling.", "expect": ["writer_dispatch", "writer_b_after_writer_a_terminal_and_audited", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_schema"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_api", "step": 3, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 6, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
     ],
     "final_state": "ACTIVE"
   }

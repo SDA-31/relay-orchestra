@@ -1,6 +1,6 @@
 interface:
   display_name: "Relay Orchestra"
-  short_description: "Parallel agents for one-shot or live work"
+  short_description: "Coordinate parallel agents safely"
   default_prompt: "Start a live $relay-orchestra session for this objective with parallel native agents where supported, keep it active across related follow-ups, disclose capability limits and fallbacks, and remain active until I directly confirm closure in a later message."
 policy:
   allow_implicit_invocation: false

@@ -62,7 +62,14 @@ Known alternatives include `.claude/skills`, `.gemini/skills`, `.cursor/skills`,
 
 ## Worktree Notes
 
-Worktree support is not part of the Agent Skills standard. Shared mode remains the default. Enable one isolated checkout per concurrent writer only after explicit user approval, keep integration in the coordinating context, and never treat a branch alone as isolation.
+Worktree support is not part of the Agent Skills standard.
+
+- Shared mode remains the default for read-only agents and at most one active writer only when writes are safely attributable. Treat pre-existing or unattributed dirty paths as user-owned; narrow ownership or offer an approved worktree before overlapping them.
+- For two or more possible concurrent writers, plan one isolated checkout per writer by default, but create none before explicit user approval. If worktrees are unavailable or declined, serialize writers.
+- Before creating any writer handle, compare canonical repository-relative file ownership across the wave. Serialize every overlap, even when simultaneous work and worktrees were explicitly requested.
+- Integrate exactly one terminal, audited writer per operation. Name that writer, inspect the shared tree, and compare its exact owned paths with current dirty user paths.
+- Block only overlapping streams, and clear protection only for exact paths authorized by the user or explicitly reconciled.
+- Keep integration in the coordinating context, and never treat a branch alone as isolation.
 
 ## Primary Documentation
 
