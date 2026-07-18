@@ -276,10 +276,10 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
         fail(f"writer_dispatches must be a non-empty list: {transcript_id}")
 
     required = {
-        "id", "step", "owned_paths", "interfaces_invariants", "isolation",
-        "after_terminal_and_audited",
+        "id", "step", "owned_paths", "edit_scope", "interfaces_invariants",
+        "isolation", "after_terminal_and_audited",
     }
-    allowed = required | {"checkout_id", "base_revision"}
+    allowed = required | {"checkout_id", "base_revision", "overlap_group"}
     by_id: dict[str, dict[str, object]] = {}
     canonical_paths_by_id: dict[str, set[str]] = {}
     checkout_ids: set[str] = set()
@@ -323,6 +323,20 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
             checkout_ids.add(dispatch["checkout_id"])
         elif "checkout_id" in dispatch:
             fail(f"shared writer claims a checkout id: {transcript_id}")
+        edit_scope = dispatch["edit_scope"]
+        if (
+            not isinstance(edit_scope, list)
+            or not edit_scope
+            or not all(isinstance(item, str) and item for item in edit_scope)
+        ):
+            fail(f"writer has an invalid logical edit scope: {transcript_id}")
+        overlap_group = dispatch.get("overlap_group")
+        if overlap_group is not None and (
+            dispatch["isolation"] != "worktree"
+            or not isinstance(overlap_group, str)
+            or not overlap_group
+        ):
+            fail(f"controlled-overlap writer lacks isolated scope data: {transcript_id}")
         if not isinstance(dependencies, list) or not all(isinstance(item, str) and item for item in dependencies):
             fail(f"invalid writer serialization dependencies: {transcript_id}")
         by_id[writer_id] = dispatch
@@ -342,9 +356,21 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
                 fail(f"invalid writer serialization dependency: {transcript_id}")
             if by_id[dependency]["step"] >= step_number:
                 fail(f"serialized writer was not dispatched later: {transcript_id}")
-            earlier_tokens = set().union(*all_tokens_by_step[:step_number - 1])
-            required_tokens = {f"{dependency}_terminal", f"{dependency}_audited"}
-            if not required_tokens.issubset(earlier_tokens):
+            dependency_dispatch_step = by_id[dependency]["step"]
+            terminal_indexes = [
+                index
+                for index, prior in enumerate(steps[:step_number - 1], start=1)
+                if index > dependency_dispatch_step
+                and prior["event"] in {"worker_result", "notification_wake", "delivery_batch"}
+                and f"{dependency}_terminal" in prior["expect"]
+            ]
+            audit_indexes = [
+                index
+                for index, prior in enumerate(steps[:step_number - 1], start=1)
+                if prior["event"] == "coordinator"
+                and f"{dependency}_audited" in prior["expect"]
+            ]
+            if not any(terminal < audit for terminal in terminal_indexes for audit in audit_indexes):
                 fail(f"serialized writer started before terminal audit: {transcript_id}")
         if dispatch["isolation"] == "worktree":
             approval_steps = [
@@ -371,7 +397,133 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
         direct = by_id[writer_id]["after_terminal_and_audited"]
         return dependency in direct or any(depends_on(item, dependency, seen.copy()) for item in direct)
 
+    overlap_groups = transcript.get("overlap_groups", [])
+    if not isinstance(overlap_groups, list):
+        fail(f"overlap_groups must be a list: {transcript_id}")
+    groups_by_id: dict[str, dict[str, object]] = {}
+    covered_overlap_keys: set[tuple[str, str, str]] = set()
+    group_required = {
+        "id", "writer_ids", "paths", "base_revision", "combined_intent",
+        "combined_interfaces_invariants", "integration_order", "resolver",
+    }
+    for group in overlap_groups:
+        if not isinstance(group, dict) or set(group) != group_required:
+            fail(f"invalid controlled-overlap group: {transcript_id}")
+        group_id = group["id"]
+        member_ids = group["writer_ids"]
+        paths = group["paths"]
+        integration_order = group["integration_order"]
+        combined_intent = group["combined_intent"]
+        combined_contracts = group["combined_interfaces_invariants"]
+        if (
+            not isinstance(group_id, str)
+            or not group_id
+            or group_id in groups_by_id
+            or not isinstance(member_ids, list)
+            or len(member_ids) < 2
+            or len(set(member_ids)) != len(member_ids)
+            or not all(isinstance(item, str) and item in by_id for item in member_ids)
+            or not isinstance(integration_order, list)
+            or len(integration_order) != len(member_ids)
+            or set(integration_order) != set(member_ids)
+            or not isinstance(group["resolver"], str)
+            or not group["resolver"]
+            or (group["resolver"] != "coordinator" and group["resolver"] not in by_id)
+            or not isinstance(group["base_revision"], str)
+            or not group["base_revision"]
+            or not isinstance(combined_intent, list)
+            or not combined_intent
+            or not all(isinstance(item, str) and item for item in combined_intent)
+            or not isinstance(combined_contracts, list)
+            or not combined_contracts
+            or not all(isinstance(item, str) and item for item in combined_contracts)
+            or not isinstance(paths, list)
+            or not paths
+        ):
+            fail(f"invalid controlled-overlap contract: {transcript_id}")
+        canonical_group_paths = {canonical_owned_path(path) for path in paths}
+        if len(canonical_group_paths) != len(paths):
+            fail(f"controlled-overlap group contains aliased paths: {transcript_id}")
+        resolver = group["resolver"]
+        if resolver != "coordinator" and not canonical_group_paths.issubset(canonical_paths_by_id[resolver]):
+            fail(f"controlled-overlap resolver does not own the conflict paths: {transcript_id}")
+        for writer_id in member_ids:
+            dispatch = by_id[writer_id]
+            if (
+                dispatch["isolation"] != "worktree"
+                or dispatch.get("overlap_group") != group_id
+                or dispatch.get("base_revision") != group["base_revision"]
+            ):
+                fail(f"controlled-overlap members lack distinct aligned worktrees: {transcript_id}")
+        for path in canonical_group_paths:
+            owners = [writer_id for writer_id in member_ids if path in canonical_paths_by_id[writer_id]]
+            if len(owners) < 2:
+                fail(f"controlled-overlap path is not shared by its members: {transcript_id}")
+            for first_index, first_id in enumerate(owners):
+                for second_id in owners[first_index + 1:]:
+                    key = tuple(sorted((first_id, second_id))) + (path,)
+                    if key in covered_overlap_keys:
+                        fail(f"concurrent overlap belongs to multiple groups: {transcript_id}")
+                    covered_overlap_keys.add(key)
+        first_dispatch = min(by_id[writer_id]["step"] for writer_id in member_ids)
+        prior_tokens = set().union(*all_tokens_by_step[:first_dispatch - 1])
+        if not {
+            "controlled_overlap_planned", "overlap_contract_recorded",
+            "combined_contract_recorded",
+        }.issubset(prior_tokens):
+            fail(f"controlled overlap was not recorded before dispatch: {transcript_id}")
+        groups_by_id[group_id] = group
+
+    for writer_id, dispatch in by_id.items():
+        group_id = dispatch.get("overlap_group")
+        if group_id is not None and group_id not in groups_by_id:
+            fail(f"writer names an unknown controlled-overlap group: {transcript_id}")
+
     writer_ids = list(by_id)
+
+    def isolated_predecessor_settled_before_shared(
+        isolated_id: str, shared_dispatch: dict[str, object]
+    ) -> bool:
+        prior_steps = steps[:shared_dispatch["step"] - 1]
+        isolated_dispatch_step = by_id[isolated_id]["step"]
+        terminal_indexes = [
+            index
+            for index, step in enumerate(prior_steps, start=1)
+            if index > isolated_dispatch_step
+            and step["event"] in {"worker_result", "notification_wake", "delivery_batch"}
+            and f"{isolated_id}_terminal" in step["expect"]
+        ]
+        audit_indexes = [
+            index
+            for index, step in enumerate(prior_steps, start=1)
+            if step["event"] == "coordinator"
+            and f"{isolated_id}_audited" in step["expect"]
+        ]
+        integrated_indexes = [
+            index
+            for index, step in enumerate(prior_steps, start=1)
+            if step["event"] == "coordinator"
+            and INTEGRATION_TOKENS.intersection(step["expect"])
+            and step.get("integrated_writer_ids") == [isolated_id]
+        ]
+        resolution_tokens = {
+            f"{isolated_id}_abandoned",
+            f"{isolated_id}_reconciled_into_shared_base",
+        }
+        resolution_indexes = [
+            index
+            for index, step in enumerate(prior_steps, start=1)
+            if step["event"] == "coordinator"
+            and resolution_tokens.intersection(step["expect"])
+        ]
+        settlement_indexes = integrated_indexes + resolution_indexes
+        return any(
+            terminal < audit < settlement
+            for terminal in terminal_indexes
+            for audit in audit_indexes
+            for settlement in settlement_indexes
+        )
+
     for index, writer_id in enumerate(writer_ids):
         for other_id in writer_ids[index + 1:]:
             ordered = depends_on(writer_id, other_id) or depends_on(other_id, writer_id)
@@ -379,8 +531,22 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
             second = by_id[other_id]
             if not ordered and {first["isolation"], second["isolation"]} != {"worktree"}:
                 fail(f"potentially concurrent writers must use approved worktrees: {transcript_id}")
-            if not ordered and canonical_paths_by_id[writer_id].intersection(canonical_paths_by_id[other_id]):
-                fail(f"concurrent writers share owned paths: {transcript_id}")
+            overlap = canonical_paths_by_id[writer_id].intersection(canonical_paths_by_id[other_id])
+            if overlap and depends_on(other_id, writer_id) and first["isolation"] == "worktree" and second["isolation"] == "shared":
+                if not isolated_predecessor_settled_before_shared(writer_id, second):
+                    fail(f"shared writer starts over a pending isolated patch: {transcript_id}")
+            if overlap and depends_on(writer_id, other_id) and second["isolation"] == "worktree" and first["isolation"] == "shared":
+                if not isolated_predecessor_settled_before_shared(other_id, first):
+                    fail(f"shared writer starts over a pending isolated patch: {transcript_id}")
+            if not ordered and overlap:
+                first_group = first.get("overlap_group")
+                second_group = second.get("overlap_group")
+                if not first_group or first_group != second_group:
+                    fail(f"concurrent writers have an unplanned path overlap: {transcript_id}")
+                for path in overlap:
+                    key = tuple(sorted((writer_id, other_id))) + (path,)
+                    if key not in covered_overlap_keys:
+                        fail(f"concurrent writer overlap is missing from its contract: {transcript_id}")
 
 
 def validate_writer_continuation(transcript: dict[str, object]) -> None:
@@ -426,11 +592,11 @@ def validate_unavailable_worktrees(transcripts: list[dict[str, object]]) -> None
         fail("unavailable-worktrees transcript must prove serialized fallback")
 
 
-def validate_direct_same_path_request_serialized(transcripts: list[dict[str, object]]) -> None:
+def validate_direct_same_path_controlled_overlap(transcripts: list[dict[str, object]]) -> None:
     try:
         transcript = next(
             item for item in transcripts
-            if item["id"] == "direct_same_path_concurrency_request_is_serialized"
+            if item["id"] == "direct_same_path_concurrency_uses_controlled_overlap"
         )
     except StopIteration:
         fail("missing direct same-path concurrency transcript")
@@ -440,16 +606,21 @@ def validate_direct_same_path_request_serialized(transcripts: list[dict[str, obj
         "direct_same_path_concurrency_requested",
         "ownership_map_before_dispatch",
         "same_path_overlap_detected",
-        "direct_concurrency_request_does_not_override_gate",
-        "worktree_approval_does_not_override_same_path_exclusivity",
-        "second_same_path_writer_not_dispatched",
-        "same_path_work_serialized",
-        "terminal_and_audited_before_reassignment",
-        "same_path_reassigned_after_terminal_audit",
+        "controlled_overlap_planned",
+        "overlap_contract_recorded",
+        "combined_contract_recorded",
+        "one_checkout_per_writer",
+        "shared_base_revision",
+        "concurrent_same_path_writers_dispatched",
+        "three_way_reconcile_against_updated_base",
+        "combined_intent_preserved",
+        "combined_contracts_preserved",
+        "combined_contracts_validated",
+        "overlap_group_verified",
     }
     dispatches = transcript.get("writer_dispatches", [])
     if not transcript["capabilities"]["isolated_writer_checkouts"] or not required.issubset(tokens):
-        fail("direct same-path request must be serialized despite worktree capability and approval")
+        fail("direct same-path request must use controlled worktree overlap")
     if len(dispatches) != 2:
         fail("direct same-path request must account for exactly two writer dispatches")
     first, second = dispatches
@@ -457,10 +628,41 @@ def validate_direct_same_path_request_serialized(transcripts: list[dict[str, obj
         canonical_owned_path(path) for path in first["owned_paths"]
     }.intersection(canonical_owned_path(path) for path in second["owned_paths"]):
         fail("direct same-path transcript does not model an owned-path collision")
-    if first["id"] not in second["after_terminal_and_audited"]:
-        fail("second same-path writer is not structurally serialized after the first")
-    if first["isolation"] != "shared" or second["isolation"] != "shared":
-        fail("serialized same-path writers should use the at-most-one-writer shared-tree path")
+    if (
+        first["isolation"] != "worktree"
+        or second["isolation"] != "worktree"
+        or first.get("overlap_group") != second.get("overlap_group")
+        or first["step"] != second["step"]
+        or first["after_terminal_and_audited"]
+        or second["after_terminal_and_audited"]
+    ):
+        fail("direct same-path writers were not structurally concurrent and isolated")
+    validate_writer_integrations(transcript)
+
+
+def validate_shared_same_path_serialized(transcripts: list[dict[str, object]]) -> None:
+    try:
+        transcript = next(
+            item for item in transcripts if item["id"] == "shared_tree_same_path_serializes"
+        )
+    except StopIteration:
+        fail("missing shared-tree same-path serialization transcript")
+    tokens = {token for step in transcript["steps"] for token in step["expect"]}
+    required = {
+        "shared_tree_overlap_forbidden", "same_path_work_serialized",
+        "writer_b_after_writer_a_terminal_and_audited", "no_concurrent_shared_writers",
+    }
+    dispatches = transcript.get("writer_dispatches", [])
+    if len(dispatches) != 2 or not required.issubset(tokens):
+        fail("shared-tree same-path work must be structurally serialized")
+    first, second = dispatches
+    if (
+        first["isolation"] != "shared"
+        or second["isolation"] != "shared"
+        or first["id"] not in second["after_terminal_and_audited"]
+        or not set(first["owned_paths"]).intersection(second["owned_paths"])
+    ):
+        fail("shared-tree same-path writers are not safely serialized")
 
 
 def validate_verified_native_compaction(transcripts: list[dict[str, object]]) -> None:
@@ -563,6 +765,7 @@ def validate_writer_integrations(transcript: dict[str, object]) -> None:
         dispatch["id"]: dispatch for dispatch in transcript.get("writer_dispatches", [])
     }
     already_integrated: set[str] = set()
+    integration_step_by_id: dict[str, int] = {}
     for index, step in enumerate(steps, start=1):
         markers = INTEGRATION_TOKENS.intersection(step["expect"])
         writer_ids = step.get("integrated_writer_ids")
@@ -588,6 +791,11 @@ def validate_writer_integrations(transcript: dict[str, object]) -> None:
             or writer_id in already_integrated
         ):
             fail(f"integration names an invalid isolated writer: {transcript_id}")
+        prior_tokens = set().union(*(set(prior["expect"]) for prior in steps[:index - 1]))
+        if {
+            f"{writer_id}_abandoned", f"{writer_id}_reconciled_into_shared_base",
+        }.intersection(prior_tokens):
+            fail(f"settled isolated writer was integrated again: {transcript_id}")
 
         terminal_token = f"{writer_id}_terminal"
         audited_token = f"{writer_id}_audited"
@@ -606,6 +814,46 @@ def validate_writer_integrations(transcript: dict[str, object]) -> None:
         if not any(terminal < audit for terminal in terminal_indexes for audit in audit_indexes):
             fail(f"writer integrated before terminal result and coordinator audit: {transcript_id}")
         already_integrated.add(writer_id)
+        integration_step_by_id[writer_id] = index
+
+    for group in transcript.get("overlap_groups", []):
+        order = group["integration_order"]
+        integrated_order = [writer_id for writer_id in order if writer_id in integration_step_by_id]
+        actual_order = [
+            writer_id for writer_id, _ in sorted(
+                integration_step_by_id.items(), key=lambda item: item[1]
+            ) if writer_id in set(order)
+        ]
+        if integrated_order != order[:len(integrated_order)] or actual_order != integrated_order:
+            fail(f"controlled-overlap integration order was not preserved: {transcript_id}")
+        for position, writer_id in enumerate(integrated_order):
+            step = steps[integration_step_by_id[writer_id] - 1]
+            required = {
+                "patch_applied_from_recorded_base",
+                "no_whole_file_overwrite",
+            }
+            if position > 0:
+                required.update({
+                    "three_way_reconcile_against_updated_base",
+                    "controlled_overlap_reconciled",
+                    "combined_intent_preserved",
+                    "combined_contracts_preserved",
+                    "clean_merge_not_semantic_proof",
+                })
+            if not required.issubset(step["expect"]):
+                fail(f"later controlled-overlap integration lacks reconciliation evidence: {transcript_id}")
+        if len(integrated_order) == len(order):
+            last_integration = max(integration_step_by_id[writer_id] for writer_id in order)
+            if not any(
+                index > last_integration
+                and step["event"] == "coordinator"
+                and {
+                    "overlap_group_verified", "combined_diff_audited",
+                    "combined_contracts_validated", "targeted_tests_pass",
+                }.issubset(step["expect"])
+                for index, step in enumerate(steps, start=1)
+            ):
+                fail(f"completed controlled-overlap group lacks combined verification: {transcript_id}")
 
 
 def validate_dirty_path_flow(transcript: dict[str, object]) -> None:
@@ -865,7 +1113,7 @@ def validate() -> None:
         "Integrate exactly one isolated writer per operation, only after that writer is terminal and the coordinator has audited its result",
         "Record the writer ID, re-inspect shared-tree status",
         "Block only an overlapping stream; an independent stream may integrate",
-        "Ownership narrowing can resolve a planned overlap only before isolated work has produced changes on it",
+        "Ownership narrowing can resolve a dirty-path overlap only before isolated work has produced changes on it",
         "make one isolated worktree per concurrent writer the default execution plan",
         "This planning default is not permission to create or use a worktree",
         "While approval is pending, dispatch no writers that could run concurrently",
@@ -873,8 +1121,16 @@ def validate() -> None:
         "shared writers have no checkout ID",
         "If isolated worktrees are unavailable or declined, serialize writers in the shared tree",
         "Start the next writer only after the previous writer is terminal and its actual changes are audited",
-        "Before every writer dispatch in any mode, record its exact owned paths plus the expected interfaces and invariants",
-        "They never permit concurrent ownership of the same path",
+        "Before dispatching a shared-tree writer on any overlapping path, integrate that patch, explicitly reconcile it into the shared base, or explicitly abandon it",
+        "Record this disposition only after the isolated writer is terminal or cancelled and its actual result is audited",
+        "Terminal and audited status alone is not enough",
+        "Before every writer dispatch in any mode, record its exact owned paths, logical edit scope, expected interfaces, and invariants",
+        "They permit planned same-path execution",
+        "three-way diff; never replace the whole file with a later worktree copy",
+        "A clean Git merge is not proof of semantic compatibility",
+        "Ask the user only when requirements are genuinely ambiguous or mutually exclusive",
+        "The resolver returns a reconciliation patch or instructions; the coordinator remains the integration authority",
+        "validate the combined interfaces and invariants",
         "do not prevent semantic, API, schema, external-state, or integration conflicts",
         "The skill imposes no fixed maximum",
         "fifteen agents",
@@ -911,13 +1167,16 @@ def validate() -> None:
         "does not itself reload instructions or restore control of lost handles",
         "The coordinator remains the only dispatcher",
         "Leaf agents must not spawn agents or invoke orchestration skills",
-        "Before creating a writer worktree or invoking any writer handle, build one ownership map",
+        "Before creating a writer worktree or invoking any writer handle, build one writer map",
         "Record each owned file as one canonical repository-root-relative POSIX path",
         "For portable Windows behavior, reject reserved characters, device names, and components ending in a dot or space",
-        "Across the ownership map, each canonical path must belong to only one nonterminal or same-wave writer",
-        "a direct request for simultaneous same-file writers, an exact agent count, or worktree approval does not override it",
-        "Do not create or dispatch the second same-path writer",
-        "State the conflict and safe schedule before the first dispatch",
+        "Classify every same-path pair as shared-tree overlap, accidental isolated overlap, or controlled isolated overlap",
+        "Shared-tree overlap is forbidden",
+        "Approved worktrees permit controlled same-path overlap",
+        "Do not serialize work merely because two useful workstreams need the same file",
+        "Edit scopes may overlap at the same symbol or hunk",
+        "Existing approval that covers one worktree per concurrent writer is sufficient",
+        "Treat any unrecorded isolated overlap as accidental",
     )
     for phrase in required_skill:
         if phrase not in text:
@@ -968,7 +1227,10 @@ def validate() -> None:
         "If worktrees are unavailable or declined, editing agents run one after another",
         "If Relay cannot tell who made an existing change, it treats the file as yours",
         "Relay still checks your changes before integration",
-        "Two agents never edit the same file path at the same time",
+        "approved isolated agents may edit the same file at the same time",
+        "Without worktree isolation, same-file writers still run one after another",
+        "applies later same-file patches against the already updated code instead of replacing the whole file",
+        "A clean Git merge is not enough",
         "Compacting the chat does not close Relay",
         "Relay can continue only from a valid resume token that it issued earlier",
         "Feedback and Support",
@@ -992,8 +1254,11 @@ def validate() -> None:
         "For two or more possible concurrent writers, plan one isolated checkout per writer by default",
         "create none before explicit user approval",
         "If worktrees are unavailable or declined, serialize writers",
+        "Shared-tree overlap must serialize; approved isolated writers may use a recorded controlled-overlap group",
         "Integrate exactly one terminal, audited writer per operation",
-        "Name that writer, inspect the shared tree",
+        "Apply each controlled-overlap result as a patch from its recorded base",
+        "three-way reconcile against the updated integration state instead of overwriting the file",
+        "verify the combined diff even when Git reports a clean merge",
     ):
         if phrase not in platforms:
             fail(f"platforms.md is missing {phrase!r}")
@@ -1137,14 +1402,23 @@ def validate() -> None:
             "handle_lifecycle_unknown", "retain_exact_accounting", "tree_unstable", "freeze_repository_operations", "freeze_overlapping_writer_dispatch"
         },
         "overlapping_writers": {
-            "pause_before_dispatch", "exclusive_path_ownership", "same_path_work_serialized",
-            "worktrees_do_not_relax_ownership", "no_silent_worktree"
+            "pause_before_dispatch", "same_path_overlap_detected",
+            "controlled_overlap_requires_worktrees", "explicit_worktree_approval_required",
+            "no_silent_worktree"
         },
         "direct_same_path_concurrency_request": {
             "ownership_map_before_dispatch", "same_path_overlap_detected",
-            "direct_concurrency_request_does_not_override_gate",
-            "second_same_path_writer_not_dispatched", "same_path_work_serialized",
-            "terminal_and_audited_before_reassignment"
+            "controlled_overlap_planned", "overlap_contract_recorded",
+            "combined_contract_recorded", "one_checkout_per_writer", "shared_base_revision",
+            "concurrent_same_path_writers_dispatched", "integrate_one_stream_at_a_time",
+            "patch_applied_from_recorded_base", "three_way_reconcile_against_updated_base",
+            "combined_intent_preserved", "combined_contracts_preserved",
+            "combined_contracts_validated",
+            "overlap_group_verified"
+        },
+        "shared_tree_same_path_serializes": {
+            "shared_tree_overlap_forbidden", "same_path_work_serialized",
+            "writer_b_after_writer_a_terminal_and_audited", "no_concurrent_shared_writers"
         },
         "approved_worktrees": {
             "worktree_mode", "one_checkout_per_writer", "predispatch_contracts_recorded",
@@ -1276,7 +1550,7 @@ def validate() -> None:
 
     for transcript in transcripts:
         required_keys = {"id", "scope", "capabilities", "initial_state", "steps", "final_state"}
-        allowed_keys = required_keys | {"writer_dispatches", "dirty_conflicts"}
+        allowed_keys = required_keys | {"writer_dispatches", "dirty_conflicts", "overlap_groups"}
         if not required_keys.issubset(transcript) or not set(transcript).issubset(allowed_keys):
             fail(f"invalid transcript scenario keys: {transcript!r}")
         transcript_id = transcript["id"]
@@ -1835,13 +2109,15 @@ def validate() -> None:
         "concurrent_writers_wait_for_worktree_approval",
         "declined_worktrees_serialize_writers",
         "unavailable_worktrees_serialize_writers",
-        "direct_same_path_concurrency_request_is_serialized",
+        "direct_same_path_concurrency_uses_controlled_overlap",
+        "shared_tree_same_path_serializes",
         "dirty_tree_overlap_blocks_single_writer",
     }
     if not required_transcripts.issubset(transcript_ids):
         fail("missing required transcript scenario")
     validate_unavailable_worktrees(transcripts)
-    validate_direct_same_path_request_serialized(transcripts)
+    validate_direct_same_path_controlled_overlap(transcripts)
+    validate_shared_same_path_serialized(transcripts)
     validate_verified_native_compaction(transcripts)
     continuous = next(
         transcript for transcript in transcripts
@@ -2071,9 +2347,27 @@ def validate() -> None:
         "writer_b_after_writer_a_terminal_and_audited",
         "ownership_map_before_dispatch",
         "same_path_overlap_detected",
-        "direct_concurrency_request_does_not_override_gate",
-        "worktree_approval_does_not_override_same_path_exclusivity",
-        "second_same_path_writer_not_dispatched",
+        "controlled_overlap_planned",
+        "overlap_contract_recorded",
+        "combined_contract_recorded",
+        "one_checkout_per_writer",
+        "shared_base_revision",
+        "resolution_owner_recorded",
+        "integration_order_recorded",
+        "concurrent_same_path_writers_dispatched",
+        "controlled_overlap_active",
+        "patch_applied_from_recorded_base",
+        "three_way_reconcile_against_updated_base",
+        "controlled_overlap_reconciled",
+        "combined_intent_preserved",
+        "combined_contracts_preserved",
+        "no_whole_file_overwrite",
+        "clean_merge_not_semantic_proof",
+        "overlap_group_verified",
+        "combined_diff_audited",
+        "combined_contracts_validated",
+        "targeted_tests_pass",
+        "shared_tree_overlap_forbidden",
         "same_path_work_serialized",
         "terminal_and_audited_before_reassignment",
         "same_path_reassigned_after_terminal_audit",

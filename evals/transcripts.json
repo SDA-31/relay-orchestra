@@ -18,7 +18,7 @@
       {"turn": 1, "event": "coordinator", "detail": "Synthesize verification, audit the latest revision, present the completion candidate, ask to close, and remain active.", "expect": ["synthesize_verification", "final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_implementation", "step": 6, "owned_paths": ["src/implementation.ts"], "interfaces_invariants": ["Implementation preserves the synthesized compatibility contract"], "isolation": "worktree", "checkout_id": "wt-implementation", "base_revision": "abc123", "after_terminal_and_audited": []}
+      {"id": "writer_implementation", "step": 6, "owned_paths": ["src/implementation.ts"], "edit_scope": ["Implement the synthesized compatibility behavior"], "interfaces_invariants": ["Implementation preserves the synthesized compatibility contract"], "isolation": "worktree", "checkout_id": "wt-implementation", "base_revision": "abc123", "after_terminal_and_audited": []}
     ],
     "final_state": "ACTIVE"
   },
@@ -64,7 +64,7 @@
       {"turn": 1, "event": "coordinator", "detail": "Synthesize and audit both results, settle every controllable worker, report, and deactivate in the one-shot final response.", "expect": ["final_audit", "workers_terminal", "synthesis_complete", "stop_for_terminal_results_and_synthesis", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "one_shot_complete", "no_close_question", "same_turn_deactivation", "OFF"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_docs", "step": 3, "owned_paths": ["docs/one-shot.md"], "interfaces_invariants": ["The documented one-shot contract remains compatible with the verifier"], "isolation": "shared", "after_terminal_and_audited": []}
+      {"id": "writer_docs", "step": 3, "owned_paths": ["docs/one-shot.md"], "edit_scope": ["Document one-shot completion semantics"], "interfaces_invariants": ["The documented one-shot contract remains compatible with the verifier"], "isolation": "shared", "after_terminal_and_audited": []}
     ],
     "final_state": "OFF"
   },
@@ -397,8 +397,8 @@
       {"turn": 2, "event": "coordinator", "detail": "Create the approved worktrees and dispatch both writers with their recorded ownership and contracts, then begin native completion polling.", "expect": ["worktrees_created_with_approval", "worktree_mode", "one_checkout_per_writer", "writer_dispatch", "exclusive_path_ownership", "expected_interfaces_and_invariants", "integrate_one_stream_at_a_time", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_api", "writer_schema"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-api", "base_revision": "da1c1a5", "after_terminal_and_audited": []},
-      {"id": "writer_schema", "step": 4, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-schema", "base_revision": "da1c1a5", "after_terminal_and_audited": []}
+      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "edit_scope": ["Update API client behavior"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-api", "base_revision": "da1c1a5", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 4, "owned_paths": ["schema/v2.json"], "edit_scope": ["Update response schema"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "worktree", "checkout_id": "wt-schema", "base_revision": "da1c1a5", "after_terminal_and_audited": []}
     ],
     "final_state": "ACTIVE"
   },
@@ -417,8 +417,8 @@
       {"turn": 2, "event": "coordinator", "detail": "Dispatch writer B with its recorded ownership and contracts, then resume native completion polling.", "expect": ["writer_dispatch", "writer_b_after_writer_a_terminal_and_audited", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_schema"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
-      {"id": "writer_schema", "step": 7, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
+      {"id": "writer_api", "step": 4, "owned_paths": ["src/api/client.ts"], "edit_scope": ["Update API client behavior"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 7, "owned_paths": ["schema/v2.json"], "edit_scope": ["Update response schema"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
     ],
     "final_state": "ACTIVE"
   },
@@ -438,7 +438,7 @@
       {"step": 2, "dirty_since_step": 1, "dirty_paths": ["src/queue/ParseJobQueue.swift"], "planned_owned_paths": ["src/queue/ParseJobQueue.swift"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_clean", "step": 5, "owned_paths": ["clean/new.swift"], "interfaces_invariants": ["Dirty queue changes remain untouched"], "isolation": "shared", "after_terminal_and_audited": []}
+      {"id": "writer_clean", "step": 5, "owned_paths": ["clean/new.swift"], "edit_scope": ["Implement the narrowed clean-file change"], "interfaces_invariants": ["Dirty queue changes remain untouched"], "isolation": "shared", "after_terminal_and_audited": []}
     ],
     "final_state": "ACTIVE"
   },
@@ -456,21 +456,46 @@
     "final_state": "ACTIVE"
   },
   {
-    "id": "direct_same_path_concurrency_request_is_serialized",
+    "id": "direct_same_path_concurrency_uses_controlled_overlap",
     "scope": "live",
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
       {"turn": 1, "event": "user", "detail": "Start Relay with exactly two writer agents concurrently. Worktrees are approved, and both writers must edit src/queue/ParseJobQueue.swift at the same time.", "expect": ["live_scope", "OFF_to_ACTIVE", "worktrees_approved", "direct_same_path_concurrency_requested"]},
-      {"turn": 1, "event": "coordinator", "detail": "Build the ownership map before creating a worktree or writer handle, detect the exact-path collision, explain that neither the direct concurrency request nor worktree approval overrides exclusive ownership, and serialize the requested writers without dispatching the second writer.", "expect": ["predispatch_contracts_recorded", "ownership_map_before_dispatch", "same_path_overlap_detected", "direct_concurrency_request_does_not_override_gate", "worktree_approval_does_not_override_same_path_exclusivity", "second_same_path_writer_not_dispatched", "same_path_work_serialized", "serialization_fallback", "shared_tree_serial_writers", "remain_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch only the finalization writer in the shared tree and begin native completion polling while the cancellation writer remains held.", "expect": ["writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_finalization"]},
-      {"turn": 1, "event": "worker_result", "detail": "The finalization writer becomes terminal and returns its same-file changes.", "expect": ["writer_finalization_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Audit the finalization writer's actual changes before reassigning the same path.", "expect": ["writer_finalization_audited", "terminal_and_audited_before_reassignment", "remain_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "Dispatch the cancellation writer in the shared tree only after the first writer is terminal and audited, then resume native completion polling.", "expect": ["writer_dispatch", "same_path_reassigned_after_terminal_audit", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_cancellation"]}
+      {"turn": 1, "event": "coordinator", "detail": "Build the writer map, record both logical edit scopes and the combined queue contract, assign distinct worktrees from one base, name the resolver and integration order, and create the approved worktrees.", "expect": ["predispatch_contracts_recorded", "ownership_map_before_dispatch", "same_path_overlap_detected", "controlled_overlap_planned", "overlap_contract_recorded", "combined_contract_recorded", "one_checkout_per_writer", "shared_base_revision", "resolution_owner_recorded", "integration_order_recorded", "worktrees_created_with_approval", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch both isolated same-path writers concurrently and begin native completion polling.", "expect": ["writer_dispatch", "concurrent_same_path_writers_dispatched", "controlled_overlap_active", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_finalization", "writer_cancellation"]},
+      {"turn": 1, "event": "worker_result", "detail": "The finalization writer becomes terminal and returns its isolated patch.", "expect": ["writer_finalization_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 1, "event": "worker_result", "detail": "The cancellation writer also becomes terminal and returns its isolated patch.", "expect": ["writer_cancellation_terminal", "result_available", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit both patches against their logical scopes and the combined queue contract.", "expect": ["writer_finalization_audited", "writer_cancellation_audited", "validate_contracts", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Integrate the first terminal audited patch from the recorded base without copying its whole worktree file or combining another writer in the same operation.", "expect": ["integrate_isolated_stream", "integrate_one_stream_at_a_time", "patch_applied_from_recorded_base", "no_whole_file_overwrite", "remain_ACTIVE"], "integrated_writer_ids": ["writer_finalization"]},
+      {"turn": 1, "event": "coordinator", "detail": "Three-way reconcile the second patch from the shared base against the updated integration state, preserving both intents and contracts instead of copying the later worktree file.", "expect": ["integrate_isolated_stream", "integrate_one_stream_at_a_time", "patch_applied_from_recorded_base", "three_way_reconcile_against_updated_base", "controlled_overlap_reconciled", "combined_intent_preserved", "combined_contracts_preserved", "no_whole_file_overwrite", "clean_merge_not_semantic_proof", "remain_ACTIVE"], "integrated_writer_ids": ["writer_cancellation"]},
+      {"turn": 1, "event": "coordinator", "detail": "Inspect the combined diff, validate the combined queue contracts, and run focused finalization and cancellation tests for the complete overlap group.", "expect": ["overlap_group_verified", "combined_diff_audited", "combined_contracts_validated", "targeted_tests_pass", "ACTIVE"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_finalization", "step": 3, "owned_paths": ["src/queue/ParseJobQueue.swift"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": []},
-      {"id": "writer_cancellation", "step": 6, "owned_paths": ["src/queue/ParseJobQueue.swift"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": ["writer_finalization"]}
+      {"id": "writer_finalization", "step": 3, "owned_paths": ["src/queue/ParseJobQueue.swift"], "edit_scope": ["Queue finalization state transitions"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "worktree", "checkout_id": "wt-finalization", "base_revision": "be98b1f", "overlap_group": "queue-races", "after_terminal_and_audited": []},
+      {"id": "writer_cancellation", "step": 3, "owned_paths": ["src/queue/ParseJobQueue.swift"], "edit_scope": ["Cancellation race handling"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "worktree", "checkout_id": "wt-cancellation", "base_revision": "be98b1f", "overlap_group": "queue-races", "after_terminal_and_audited": []}
+    ],
+    "overlap_groups": [
+      {"id": "queue-races", "writer_ids": ["writer_finalization", "writer_cancellation"], "paths": ["src/queue/ParseJobQueue.swift"], "base_revision": "be98b1f", "combined_intent": ["Preserve correct finalization while making cancellation race-safe"], "combined_interfaces_invariants": ["Finalization remains idempotent and cancellation cannot publish a stale terminal state"], "integration_order": ["writer_finalization", "writer_cancellation"], "resolver": "coordinator"}
+    ],
+    "final_state": "ACTIVE"
+  },
+  {
+    "id": "shared_tree_same_path_serializes",
+    "scope": "live",
+    "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
+    "initial_state": "OFF",
+    "steps": [
+      {"turn": 1, "event": "user", "detail": "Start Relay with two writers on src/queue/ParseJobQueue.swift, but do not create worktrees.", "expect": ["live_scope", "OFF_to_ACTIVE", "worktree_declined"]},
+      {"turn": 1, "event": "coordinator", "detail": "Build the writer map, detect shared-tree overlap, record both contracts, and serialize the work.", "expect": ["predispatch_contracts_recorded", "ownership_map_before_dispatch", "same_path_overlap_detected", "shared_tree_overlap_forbidden", "same_path_work_serialized", "serialization_fallback", "shared_tree_serial_writers", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch only the finalization writer and begin native completion polling.", "expect": ["writer_dispatch", "only_one_active_writer", "no_concurrent_shared_writers", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_finalization"]},
+      {"turn": 1, "event": "worker_result", "detail": "The finalization writer becomes terminal.", "expect": ["writer_finalization_terminal", "result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Audit the finalization changes before reassigning the same path.", "expect": ["writer_finalization_audited", "terminal_and_audited_before_reassignment", "remain_ACTIVE"]},
+      {"turn": 1, "event": "coordinator", "detail": "Dispatch the cancellation writer only after the first writer is terminal and audited, then resume native completion polling.", "expect": ["writer_dispatch", "writer_b_after_writer_a_terminal_and_audited", "same_path_reassigned_after_terminal_audit", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_cancellation"]}
+    ],
+    "writer_dispatches": [
+      {"id": "writer_finalization", "step": 3, "owned_paths": ["src/queue/ParseJobQueue.swift"], "edit_scope": ["Queue finalization state transitions"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_cancellation", "step": 6, "owned_paths": ["src/queue/ParseJobQueue.swift"], "edit_scope": ["Cancellation race handling"], "interfaces_invariants": ["Queue finalization and cancellation semantics remain compatible"], "isolation": "shared", "after_terminal_and_audited": ["writer_finalization"]}
     ],
     "final_state": "ACTIVE"
   },
@@ -488,8 +513,8 @@
       {"turn": 1, "event": "coordinator", "detail": "Dispatch writer B in the shared tree after writer A is terminal and audited, then resume native completion polling.", "expect": ["writer_dispatch", "writer_b_after_writer_a_terminal_and_audited", "only_one_active_writer", "no_concurrent_shared_writers", "validate_contracts", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"], "writer_ids": ["writer_schema"]}
     ],
     "writer_dispatches": [
-      {"id": "writer_api", "step": 3, "owned_paths": ["src/api/client.ts"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
-      {"id": "writer_schema", "step": 6, "owned_paths": ["schema/v2.json"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
+      {"id": "writer_api", "step": 3, "owned_paths": ["src/api/client.ts"], "edit_scope": ["Update API client behavior"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": []},
+      {"id": "writer_schema", "step": 6, "owned_paths": ["schema/v2.json"], "edit_scope": ["Update response schema"], "interfaces_invariants": ["ClientResponse remains compatible with schema/v2.json"], "isolation": "shared", "after_terminal_and_audited": ["writer_api"]}
     ],
     "final_state": "ACTIVE"
   }

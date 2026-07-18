@@ -19,6 +19,7 @@ Writer-policy transcripts may include `writer_dispatches`. Each dispatch step li
 
 - `step`: the 1-based dispatch step;
 - `owned_paths`: exact file paths;
+- `edit_scope`: the writer's logical change inside those files;
 - `interfaces_invariants`: non-empty shared contracts;
 - `isolation`: `shared` or `worktree`;
 - `after_terminal_and_audited`: writers that must finish first.
@@ -27,7 +28,9 @@ Every owned file uses one canonical repository-root-relative POSIX path. Reject 
 
 A worktree record also needs a globally unique `checkout_id` and `base_revision`; shared records omit `checkout_id`. User approval comes before worktree creation. Every dispatch continues through its scope's native mechanism: live automatic wake or polling, or one-shot polling.
 
-For a dependency named `writer_api`, earlier steps must contain `writer_api_terminal` and then `writer_api_audited`. Concurrent writers use approved distinct worktrees. Same-path writers use terminal-and-audited ordering even when the prompt asks for simultaneous work and pre-approves worktrees.
+For a dependency named `writer_api`, earlier steps must contain `writer_api_terminal` and then `writer_api_audited`. Concurrent writers use approved distinct worktrees. Shared-tree same-path writers use terminal-and-audited ordering.
+
+Approved worktree writers may share paths only through `overlap_group`. The matching top-level `overlap_groups` record contains the group ID, participating writers, canonical overlapping paths, shared base revision, combined intent, combined interfaces and invariants, integration order, and resolver. The resolver is `coordinator` or a registered writer ID. Every participant has a distinct checkout, a logical edit scope, and the same recorded base. Unrecorded concurrent overlap is invalid.
 
 ## Dirty Paths and Integration
 
@@ -41,5 +44,7 @@ Each `dirty_conflicts` entry records `step`, `dirty_since_step`, `dirty_paths`, 
 - Each resolution clears only its named canonical paths. Other overlaps stay protected.
 
 Every integration operation supplies exactly one `integrated_writer_ids` entry, even when no dirty path exists. That isolated writer needs a terminal result and a later coordinator audit. Paths are checked per writer, so a clean stream can proceed while another stream remains blocked.
+
+Controlled-overlap members integrate in their recorded order. Every member must be applied as a patch from the recorded base without whole-file overwrite. Every member after the first also requires three-way reconciliation against the updated integration state plus combined-intent and combined-contract preservation. After the final member, the coordinator-authored transcript must record a combined diff audit, combined-contract validation, and focused tests for the complete group. A resolver may prepare a reconciliation patch or instructions, but the coordinator audits and integrates it.
 
 CI validates the package structure and required policy language. Before a release, invoke Relay Orchestra against representative cases with the target clients and record any platform-specific behavior separately.

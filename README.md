@@ -145,7 +145,9 @@ Relay never creates worktrees without asking. Before an editing agent starts, Re
 
 If Relay cannot tell who made an existing change, it treats the file as yours and does not edit it. You can allow Relay to edit a specific changed file; that permission covers only that file. A worktree keeps an agent's edits separate, but Relay still checks your changes before integration. If you edit a file while a shared-tree agent is editing it, Relay pauses overlapping work until both sets of changes are reviewed.
 
-Worktrees separate checked-out files, but they do not prevent API, schema, or design conflicts. Two agents never edit the same file path at the same time, even in separate worktrees. Relay integrates the changes from one finished and reviewed writer at a time, then checks that shared behavior still works.
+Worktrees separate checked-out files, so approved isolated agents may edit the same file at the same time. Relay records what each agent is trying to change, the shared starting revision, the combined expected behavior, and who will resolve conflicts. Agents may even touch the same lines when the parallel speedup is worth the merge cost. Without worktree isolation, same-file writers still run one after another.
+
+Relay integrates one finished and reviewed writer at a time. It applies later same-file patches against the already updated code instead of replacing the whole file. A clean Git merge is not enough: Relay reviews and tests the combined behavior from every writer.
 
 ## Compatibility and Limitations
 
@@ -161,7 +163,7 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Lifecycle controls | Follow-up, interruption, and closure vary by client and version. |
 | Context compaction | Compacting the chat does not close Relay. If the client preserves session state, Relay continues normally. Otherwise, Relay can continue only from a valid resume token that it issued earlier. |
 | Concurrency | The host sets practical limits; Relay Orchestra schedules within them. |
-| Worktrees | Planned by default for two or more concurrent writers; creation always requires explicit approval, otherwise writers are serialized. |
+| Worktrees | Planned by default for two or more concurrent writers; creation requires explicit approval. Approved worktrees support controlled same-file overlap; otherwise writers are serialized. |
 
 Without auto-wake, a live session automatically uses native completion waits or polling in short bounded intervals while active work remains and a specific completion or status condition can be observed. Between intervals Relay processes newer user input and delivered results, then advances dependent waves, integration, verification, and synthesis. It discloses once that the coordinator remains **In Progress** and a message may wait up to one poll interval.
 

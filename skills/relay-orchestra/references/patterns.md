@@ -22,13 +22,13 @@ For large counts, partition by module, user journey, risk class, time range, or 
 
 Split by module, user flow, package, or explicit path ownership. Before dispatch:
 
-1. Build an ownership map across nonterminal and same-wave writers; assign exactly one possible active owner per exact path.
+1. Build a writer map across nonterminal and same-wave writers; classify every path overlap as shared, accidental isolated, or controlled isolated.
 2. Record shared interfaces and invariants.
 3. Identify coordinator-only files.
 4. If two or more writers could run together, plan one worktree per writer and obtain explicit approval before creation; otherwise use the shared tree.
 5. Define audit or integration order.
 
-If two workstreams need the same file, do not create or dispatch the second writer concurrently. Serialize them or give the file to one owner while the other returns read-only recommendations. Treat this as a mandatory pre-dispatch gate even when the user requests simultaneous writers, specifies an exact agent count, or approves worktrees. Worktree isolation does not relax this rule.
+Treat the first step as exclusive ownership only in the shared tree. With approved worktrees, two useful workstreams may intentionally own the same path through a controlled-overlap group. Record each writer's logical edit scope, a shared base revision, the combined intended outcome, integration order, and resolution owner. Prefer disjoint files or symbols when that preserves useful parallelism, but do not serialize automatically when a bounded same-file overlap is the fastest coherent plan.
 
 ## Dependency And Capacity Waves
 
@@ -57,13 +57,17 @@ If two or more agents could write at the same time, make one isolated worktree p
 
 Do not dispatch concurrent writers while approval is pending. If worktrees are unavailable or declined, serialize writers in the shared tree; start the next only after the previous writer is terminal and its changes are audited. A branch alone is not file isolation.
 
+When switching an overlapping path from an isolated writer to a shared-tree writer, settle the isolated patch first: integrate it, reconcile it into the shared base, or abandon it explicitly. Record that disposition only after the isolated writer is terminal or cancelled and its actual result is audited. Terminal and audited status without patch disposition is insufficient.
+
 ### Before Dispatch
 
 1. Record every owned file as one canonical repository-root-relative POSIX path plus expected interfaces and invariants.
 2. Reject absolute or worktree-specific paths, globs, directories, `.`/`..`, Windows-reserved characters or device names, and path components ending in a dot or space.
 3. Resolve Unicode, hardlink, symlink, and case aliases to one logical identity before comparison.
-4. Build and audit the ownership map before creating a writer worktree or invoking its handle.
-5. Keep one possible active owner per canonical path per wave, even with worktrees. If a path overlaps, hold the later writer until the current owner is terminal and audited.
+4. Build and audit the writer map before creating a writer worktree or invoking its handle.
+5. Keep one possible active owner per canonical path in the shared tree.
+6. For isolated writers, reject accidental overlaps but permit a recorded controlled-overlap group. Give every participant a distinct worktree from the same confirmed base and record its logical edit scope, combined intent, contracts, integration order, and resolver.
+7. Allow even same-hunk work when its parallel value justifies the merge cost. Keep waves and the conflict surface bounded, avoid competing whole-file rewrites, and serialize only a repeatedly hot scope when reconciliation starts consuming more time than feature work.
 
 ### Integration
 
@@ -73,7 +77,10 @@ Worktrees isolate checked-out files, not semantic, API, schema, external-state, 
 2. Record its writer ID, re-inspect shared-tree status, and compare that writer's canonical owned paths with the currently protected dirty paths.
 3. Worktree approval alone never authorizes integration over dirty user paths. Block an overlapping stream, but allow an independent stream to integrate.
 4. A user authorization or coordinator reconciliation clears only its exact named dirty paths; all other overlaps remain protected. Ownership narrowing is valid only before isolated work has produced changes on an overlapping path.
-5. Validate recorded contracts and retain worktrees until integration or explicit abandonment. Remove task-created worktrees after verified integration when cleanup is authorized.
+5. For a controlled-overlap group, preserve patches relative to the shared base. Apply the first stream, then three-way reconcile later patches against the updated integration state; never copy a later worktree's whole file over earlier work.
+6. Resolve small ordinary conflicts in the coordinator. Prefer the recorded context-rich resolver for non-trivial same-hunk or cross-contract conflicts, but keep integration coordinator-authored: audit the resolver's patch or instructions before applying them. Ask the user only for ambiguous or incompatible product intent.
+7. Treat a clean merge as insufficient evidence. Audit the combined diff, validate the combined interfaces and invariants, and test every participating workstream after the group is assembled.
+8. Validate recorded contracts and retain worktrees until integration or explicit abandonment. Remove task-created worktrees after verified integration when cleanup is authorized.
 
 ## Synthesis
 
@@ -85,7 +92,8 @@ Normalize results into confirmed consensus, meaningful disagreement, verified ev
 - Silently reducing the requested total
 - Decorative agents without a lens, partition, or ownership
 - Nested subagent trees
-- Concurrent writers sharing overlapping paths
+- Unrecorded or shared-tree writers sharing overlapping paths
+- Blindly overwriting an integrated file with a later worktree copy
 - Treating a branch in one checkout as isolation
 - Worktree creation without approval
 - Raw transcript forwarding

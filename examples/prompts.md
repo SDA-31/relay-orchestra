@@ -34,6 +34,14 @@ Start a live Relay Orchestra session. I approve one isolated worktree per
 concurrent writer.
 ```
 
+## Controlled same-file work
+
+```text
+Start a live Relay Orchestra session. I approve one worktree per concurrent
+writer. Let the authentication and retry writers edit src/client.ts in parallel,
+then reconcile both patches and test the combined behavior.
+```
+
 ## Stop
 
 ```text

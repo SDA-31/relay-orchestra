@@ -66,8 +66,9 @@ Worktree support is not part of the Agent Skills standard.
 
 - Shared mode remains the default for read-only agents and at most one active writer only when writes are safely attributable. Treat pre-existing or unattributed dirty paths as user-owned; narrow ownership or offer an approved worktree before overlapping them.
 - For two or more possible concurrent writers, plan one isolated checkout per writer by default, but create none before explicit user approval. If worktrees are unavailable or declined, serialize writers.
-- Before creating any writer handle, compare canonical repository-relative file ownership across the wave. Serialize every overlap, even when simultaneous work and worktrees were explicitly requested.
-- Integrate exactly one terminal, audited writer per operation. Name that writer, inspect the shared tree, and compare its exact owned paths with current dirty user paths.
+- Before creating any writer handle, compare canonical repository-relative paths and logical edit scopes across the wave. Shared-tree overlap must serialize; approved isolated writers may use a recorded controlled-overlap group from one confirmed base revision.
+- Integrate exactly one terminal, audited writer per operation. Apply each controlled-overlap result as a patch from its recorded base; for later writers, three-way reconcile against the updated integration state instead of overwriting the file.
+- Keep the combined requirement authoritative, use a coordinator or context-rich resolver for ordinary conflicts, and verify the combined diff even when Git reports a clean merge.
 - Block only overlapping streams, and clear protection only for exact paths authorized by the user or explicitly reconciled.
 - Keep integration in the coordinating context, and never treat a branch alone as isolation.
 

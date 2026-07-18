@@ -83,15 +83,125 @@ class OwnedPathValidationTests(unittest.TestCase):
                 validator.canonical_owned_path("second.swift", root),
             )
 
-    def test_concurrent_writer_rejects_case_alias(self) -> None:
+    def test_unplanned_concurrent_writer_rejects_case_alias(self) -> None:
         scenario = transcript("concurrent_writers_wait_for_worktree_approval")
         scenario["writer_dispatches"][1]["owned_paths"] = ["SRC/API/CLIENT.TS"]
 
-        with self.assertRaisesRegex(ValueError, "share owned paths"):
+        with self.assertRaisesRegex(ValueError, "unplanned path overlap"):
             validator.validate_writer_dispatches(scenario)
 
 
 class WriterStructureValidationTests(unittest.TestCase):
+    @staticmethod
+    def isolated_then_shared_same_path() -> dict[str, object]:
+        return {
+            "id": "isolated-then-shared-same-path",
+            "capabilities": {"isolated_writer_checkouts": True},
+            "steps": [
+                {"event": "user", "expect": ["worktrees_approved"]},
+                {"event": "coordinator", "expect": ["predispatch_contracts_recorded", "worktrees_created_with_approval"]},
+                {"event": "coordinator", "expect": ["writer_dispatch"], "writer_ids": ["writer_isolated"]},
+                {"event": "worker_result", "expect": ["writer_isolated_terminal"]},
+                {"event": "coordinator", "expect": ["writer_isolated_audited"]},
+                {"event": "coordinator", "expect": ["writer_dispatch"], "writer_ids": ["writer_shared"]},
+            ],
+            "writer_dispatches": [
+                {
+                    "id": "writer_isolated",
+                    "step": 3,
+                    "owned_paths": ["src/shared.swift"],
+                    "edit_scope": ["Prepare isolated behavior"],
+                    "interfaces_invariants": ["Shared behavior remains compatible"],
+                    "isolation": "worktree",
+                    "checkout_id": "wt-isolated",
+                    "base_revision": "abc123",
+                    "after_terminal_and_audited": [],
+                },
+                {
+                    "id": "writer_shared",
+                    "step": 6,
+                    "owned_paths": ["src/shared.swift"],
+                    "edit_scope": ["Continue shared-tree behavior"],
+                    "interfaces_invariants": ["Shared behavior remains compatible"],
+                    "isolation": "shared",
+                    "after_terminal_and_audited": ["writer_isolated"],
+                },
+            ],
+        }
+
+    def test_shared_writer_cannot_start_over_a_pending_isolated_patch(self) -> None:
+        scenario = self.isolated_then_shared_same_path()
+
+        with self.assertRaisesRegex(ValueError, "pending isolated patch"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_premature_abandonment_marker_does_not_settle_a_later_patch(self) -> None:
+        scenario = self.isolated_then_shared_same_path()
+        scenario["steps"][1]["expect"].append("writer_isolated_abandoned")
+
+        with self.assertRaisesRegex(ValueError, "pending isolated patch"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_shared_writer_can_start_after_isolated_patch_integration(self) -> None:
+        scenario = self.isolated_then_shared_same_path()
+        scenario["steps"].insert(
+            5,
+            {
+                "event": "coordinator",
+                "expect": ["integrate_isolated_stream"],
+                "integrated_writer_ids": ["writer_isolated"],
+            },
+        )
+        scenario["writer_dispatches"][1]["step"] = 7
+
+        validator.validate_writer_dispatches(scenario)
+        validator.validate_writer_integrations(scenario)
+
+    def test_controlled_same_path_worktree_overlap_is_valid(self) -> None:
+        validator.validate_writer_dispatches(
+            transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        )
+
+    def test_controlled_overlap_requires_a_shared_base(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario["writer_dispatches"][1]["base_revision"] = "different-base"
+
+        with self.assertRaisesRegex(ValueError, "aligned worktrees"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_every_writer_requires_a_logical_edit_scope(self) -> None:
+        scenario = transcript("concurrent_writers_wait_for_worktree_approval")
+        scenario["writer_dispatches"][0].pop("edit_scope")
+
+        with self.assertRaisesRegex(ValueError, "invalid writer dispatch"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_same_path_worktree_overlap_requires_a_group_contract(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario.pop("overlap_groups")
+
+        with self.assertRaisesRegex(ValueError, "unknown controlled-overlap group"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_controlled_overlap_requires_a_combined_contract(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario["overlap_groups"][0].pop("combined_interfaces_invariants")
+
+        with self.assertRaisesRegex(ValueError, "invalid controlled-overlap group"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_controlled_overlap_rejects_a_phantom_resolver(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario["overlap_groups"][0]["resolver"] = "writer_not_registered"
+
+        with self.assertRaisesRegex(ValueError, "invalid controlled-overlap contract"):
+            validator.validate_writer_dispatches(scenario)
+
+    def test_shared_same_path_writers_stay_serialized(self) -> None:
+        validator.validate_writer_dispatches(
+            transcript("shared_tree_same_path_serializes")
+        )
+
     def test_dispatch_step_accounts_for_every_writer_id(self) -> None:
         scenario = transcript("concurrent_writers_wait_for_worktree_approval")
         scenario["writer_dispatches"].pop()
@@ -116,6 +226,7 @@ class WriterStructureValidationTests(unittest.TestCase):
                     "id": "writer_one",
                     "step": 3,
                     "owned_paths": ["src/one.swift"],
+                    "edit_scope": ["Implement first API change"],
                     "interfaces_invariants": ["API remains stable"],
                     "isolation": "worktree",
                     "checkout_id": "wt-shared",
@@ -126,6 +237,7 @@ class WriterStructureValidationTests(unittest.TestCase):
                     "id": "writer_two",
                     "step": 6,
                     "owned_paths": ["src/two.swift"],
+                    "edit_scope": ["Implement second API change"],
                     "interfaces_invariants": ["API remains stable"],
                     "isolation": "worktree",
                     "checkout_id": "wt-shared",
@@ -149,6 +261,53 @@ class WriterStructureValidationTests(unittest.TestCase):
 
 
 class WriterIntegrationValidationTests(unittest.TestCase):
+    def test_first_controlled_overlap_integration_uses_the_recorded_base_patch(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        first_integration = next(
+            step for step in scenario["steps"]
+            if "integrate_isolated_stream" in step["expect"]
+        )
+        first_integration["expect"].remove("patch_applied_from_recorded_base")
+
+        with self.assertRaisesRegex(ValueError, "lacks reconciliation evidence"):
+            validator.validate_writer_integrations(scenario)
+
+    def test_controlled_overlap_requires_three_way_reconciliation(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        second_integration = next(
+            step for step in scenario["steps"]
+            if "controlled_overlap_reconciled" in step["expect"]
+        )
+        second_integration["expect"].remove("three_way_reconcile_against_updated_base")
+
+        with self.assertRaisesRegex(ValueError, "lacks reconciliation evidence"):
+            validator.validate_writer_integrations(scenario)
+
+    def test_controlled_overlap_requires_combined_verification(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario["steps"][-1]["expect"].remove("targeted_tests_pass")
+
+        with self.assertRaisesRegex(ValueError, "lacks combined verification"):
+            validator.validate_writer_integrations(scenario)
+
+    def test_controlled_overlap_validates_the_combined_contract(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        scenario["steps"][-1]["expect"].remove("combined_contracts_validated")
+
+        with self.assertRaisesRegex(ValueError, "lacks combined verification"):
+            validator.validate_writer_integrations(scenario)
+
+    def test_controlled_overlap_preserves_integration_order(self) -> None:
+        scenario = transcript("direct_same_path_concurrency_uses_controlled_overlap")
+        integration_steps = [
+            step for step in scenario["steps"] if "integrate_isolated_stream" in step["expect"]
+        ]
+        integration_steps[0]["integrated_writer_ids"] = ["writer_cancellation"]
+        integration_steps[1]["integrated_writer_ids"] = ["writer_finalization"]
+
+        with self.assertRaisesRegex(ValueError, "integration order was not preserved"):
+            validator.validate_writer_integrations(scenario)
+
     def test_clean_integration_requires_exact_writer_id(self) -> None:
         scenario = transcript("no_auto_wake_continues_through_completion_candidate")
         integration = next(step for step in scenario["steps"] if "integrate_completed_work" in step["expect"])
