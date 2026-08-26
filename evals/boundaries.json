@@ -1,0 +1,248 @@
+{
+  "authority_events": [
+    {
+      "id": "user-leaf-scope-4",
+      "source": "user_request",
+      "author": "user",
+      "kind": "scope_authority",
+      "task_ref": "leaf-device-task",
+      "grants": ["delegated_scope"],
+      "details": {}
+    },
+    {
+      "id": "repo-leaf-policy-4",
+      "source": "repository_instructions",
+      "author": "repository",
+      "kind": "scope_authority",
+      "task_ref": "leaf-device-task",
+      "grants": ["repository_scope"],
+      "details": {}
+    },
+    {
+      "id": "user-device-install-4",
+      "source": "user_request",
+      "author": "user",
+      "kind": "action_authority",
+      "task_ref": "leaf-device-task",
+      "grants": ["action:device_install"],
+      "details": {}
+    },
+    {
+      "id": "host-device-install-4",
+      "source": "host_policy",
+      "author": "host",
+      "kind": "action_authority",
+      "task_ref": "leaf-device-task",
+      "grants": ["action:device_install"],
+      "details": {}
+    },
+    {
+      "id": "user-child-live-activation-6",
+      "source": "user_request",
+      "author": "user",
+      "kind": "explicit_relay_activation",
+      "task_ref": "child-navigation-task",
+      "grants": ["relay_activation", "delegated_scope"],
+      "details": {}
+    },
+    {
+      "id": "user-child-live-budget-6",
+      "source": "user_request",
+      "author": "user",
+      "kind": "agent_budget",
+      "task_ref": "child-navigation-task",
+      "grants": ["agent_budget"],
+      "details": {
+        "mode": "EXACT",
+        "ceiling": 2,
+        "accounting_scope": "child"
+      }
+    },
+    {
+      "id": "user-child-background-activation-9",
+      "source": "user_request",
+      "author": "user",
+      "kind": "explicit_relay_activation",
+      "task_ref": "child-background-audit-task",
+      "grants": ["relay_activation", "delegated_scope"],
+      "details": {}
+    },
+    {
+      "id": "user-child-background-budget-9",
+      "source": "user_request",
+      "author": "user",
+      "kind": "agent_budget",
+      "task_ref": "child-background-audit-task",
+      "grants": ["agent_budget"],
+      "details": {
+        "mode": "EXACT",
+        "ceiling": 1,
+        "accounting_scope": "child"
+      }
+    }
+  ],
+  "host_capabilities": [
+    {
+      "id": "host-child-navigation-direct-channel",
+      "source": "host_policy",
+      "task_ref": "child-navigation-task",
+      "name": "direct_user_channel",
+      "value": true
+    },
+    {
+      "id": "host-child-background-no-direct-channel",
+      "source": "host_policy",
+      "task_ref": "child-background-audit-task",
+      "name": "direct_user_channel",
+      "value": false
+    }
+  ],
+  "session_records": [
+    {
+      "id": "root-session-rev-4",
+      "owner": "coordinator",
+      "state": "ACTIVE"
+    },
+    {
+      "id": "root-session-rev-6",
+      "owner": "coordinator",
+      "state": "ACTIVE"
+    },
+    {
+      "id": "root-session-rev-9",
+      "owner": "coordinator",
+      "state": "ACTIVE"
+    }
+  ],
+  "delegations": [
+    {
+      "role": "leaf",
+      "relay_invocation": false,
+      "session_token": false,
+      "close_question": false,
+      "explicit_relay_grant_ref": null,
+      "parent_session_ref": "root-session-rev-4",
+      "target_task_ref": "leaf-device-task",
+      "relay_scope": null,
+      "local_agent_budget": null,
+      "direct_user_channel_ref": null,
+      "authority_refs": [
+        "user-leaf-scope-4",
+        "repo-leaf-policy-4",
+        "user-device-install-4",
+        "host-device-install-4"
+      ],
+      "special_actions": [
+        {
+          "name": "device_install",
+          "grant_refs": ["user-device-install-4", "host-device-install-4"]
+        }
+      ],
+      "close_confirmation_actor": null,
+      "parent_may_confirm_close": null
+    },
+    {
+      "role": "child_coordinator",
+      "relay_invocation": true,
+      "session_token": false,
+      "close_question": false,
+      "explicit_relay_grant_ref": "user-child-live-activation-6",
+      "parent_session_ref": "root-session-rev-6",
+      "target_task_ref": "child-navigation-task",
+      "relay_scope": "live",
+      "local_agent_budget": {
+        "mode": "EXACT",
+        "ceiling": 2,
+        "accounting_scope": "child",
+        "aggregate_reported": true,
+        "budget_ref": "user-child-live-budget-6"
+      },
+      "direct_user_channel_ref": "host-child-navigation-direct-channel",
+      "authority_refs": [
+        "user-child-live-activation-6",
+        "user-child-live-budget-6"
+      ],
+      "special_actions": [],
+      "close_confirmation_actor": "user",
+      "parent_may_confirm_close": false
+    },
+    {
+      "role": "child_coordinator",
+      "relay_invocation": true,
+      "session_token": false,
+      "close_question": false,
+      "explicit_relay_grant_ref": "user-child-background-activation-9",
+      "parent_session_ref": "root-session-rev-9",
+      "target_task_ref": "child-background-audit-task",
+      "relay_scope": "one_shot",
+      "local_agent_budget": {
+        "mode": "EXACT",
+        "ceiling": 1,
+        "accounting_scope": "child",
+        "aggregate_reported": true,
+        "budget_ref": "user-child-background-budget-9"
+      },
+      "direct_user_channel_ref": "host-child-background-no-direct-channel",
+      "authority_refs": [
+        "user-child-background-activation-9",
+        "user-child-background-budget-9"
+      ],
+      "special_actions": [],
+      "close_confirmation_actor": null,
+      "parent_may_confirm_close": null
+    }
+  ],
+  "user_facing_outputs": [
+    {
+      "task_session_ref": "root-session-rev-6",
+      "text": "Implementation complete. Focused checks pass; one documented host limitation remains.",
+      "internal_payload_kinds": [],
+      "evidence_excerpts": [
+        {
+          "kind": "command_evidence",
+          "explicitly_requested": true,
+          "redacted": true
+        }
+      ],
+      "required_host_controls": [],
+      "resume_token": null,
+      "synthesis_sections": [
+        "outcome",
+        "evidence",
+        "changed_paths",
+        "checks",
+        "risks",
+        "next_action"
+      ]
+    },
+    {
+      "task_session_ref": "child-navigation-rev-2",
+      "text": "The visible child task is complete and ready for a later direct follow-up.",
+      "internal_payload_kinds": [],
+      "evidence_excerpts": [],
+      "required_host_controls": [],
+      "resume_token": {
+        "origin": "coordinator",
+        "fallback_required": true,
+        "single_line": true,
+        "serialization": "opaque_handle",
+        "contains_raw_payload": false,
+        "contains_ledger_fields": false,
+        "markdown_code": false,
+        "unfinished_state": ["pending_close"],
+        "issued_by_runtime": true,
+        "redeemable": true,
+        "rendered": "rly1_T8rGv4Yh2sKp7Nq5Wm3Bx9Zd",
+        "session_ref": "child-navigation-rev-2"
+      },
+      "synthesis_sections": [
+        "outcome",
+        "evidence",
+        "changed_paths",
+        "checks",
+        "risks",
+        "next_action"
+      ]
+    }
+  ]
+}

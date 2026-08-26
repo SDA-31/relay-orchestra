@@ -8,6 +8,7 @@ import re
 import sys
 import unicodedata
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,462 @@ SKILL = SKILL_DIR / "SKILL.md"
 
 def fail(message: str) -> None:
     raise ValueError(message)
+
+
+def markdown_anchors(text: str) -> set[str]:
+    """Return GitHub-style anchors for ATX headings, including duplicate suffixes."""
+    anchors: set[str] = set()
+    counts: dict[str, int] = {}
+    fence_character: str | None = None
+    fence_length = 0
+    for line in text.splitlines():
+        if fence_character is not None:
+            closing_fence = re.match(r"^\s{0,3}(`{3,}|~{3,})\s*$", line)
+            if (
+                closing_fence
+                and closing_fence.group(1)[0] == fence_character
+                and len(closing_fence.group(1)) >= fence_length
+            ):
+                fence_character = None
+                fence_length = 0
+            continue
+        opening_fence = re.match(r"^\s{0,3}(`{3,}|~{3,})(.*)$", line)
+        if opening_fence:
+            marker = opening_fence.group(1)
+            fence_character = marker[0]
+            fence_length = len(marker)
+            continue
+        match = re.match(r"^#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if not match:
+            continue
+        heading = re.sub(r"`([^`]*)`", r"\1", match.group(1))
+        heading = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", heading)
+        heading = re.sub(r"<[^>]+>", "", heading)
+        slug = re.sub(r"[^\w\s-]", "", heading.lower(), flags=re.UNICODE)
+        slug = re.sub(r"\s+", "-", slug.strip())
+        occurrence = counts.get(slug, 0)
+        counts[slug] = occurrence + 1
+        anchor = slug if occurrence == 0 else f"{slug}-{occurrence}"
+        anchors.add(anchor)
+    return anchors
+
+
+def validate_local_markdown_link(source: Path, target: str) -> None:
+    """Validate both the file and optional heading fragment of a local Markdown link."""
+    try:
+        source_label = str(source.relative_to(ROOT))
+    except ValueError:
+        source_label = str(source)
+    local_target, separator, raw_fragment = target.partition("#")
+    destination = source if not local_target else source.parent / local_target
+    if not destination.exists():
+        fail(f"broken local link {target!r} in {source_label}")
+    if separator:
+        fragment = unquote(raw_fragment)
+        if not fragment or fragment not in markdown_anchors(destination.read_text(encoding="utf-8")):
+            fail(f"broken local anchor {target!r} in {source_label}")
+
+
+def _records_by_id(
+    records: object,
+    *,
+    required_fields: set[str],
+    label: str,
+) -> dict[str, dict[str, object]]:
+    """Index trusted fixture records while rejecting malformed or duplicate IDs."""
+    if not isinstance(records, list):
+        fail(f"{label} must be a list")
+    indexed: dict[str, dict[str, object]] = {}
+    for record in records:
+        if not isinstance(record, dict) or set(record) != required_fields:
+            fail(f"{label} contains a malformed record")
+        record_id = record["id"]
+        if not isinstance(record_id, str) or not record_id or record_id in indexed:
+            fail(f"{label} contains an invalid or duplicate id")
+        indexed[record_id] = record
+    return indexed
+
+
+def validate_delegation_boundary(
+    dispatch: dict[str, object],
+    authority_events: object,
+    host_capabilities: object,
+    session_records: object,
+) -> None:
+    """Validate dispatch references against separately recorded authority and host facts."""
+    required = {
+        "role", "relay_invocation", "session_token", "close_question",
+        "explicit_relay_grant_ref", "parent_session_ref", "target_task_ref", "relay_scope",
+        "local_agent_budget", "direct_user_channel_ref", "authority_refs", "special_actions",
+        "close_confirmation_actor", "parent_may_confirm_close",
+    }
+    if set(dispatch) != required:
+        fail("delegation boundary has invalid fields")
+    authorities = _records_by_id(
+        authority_events,
+        required_fields={"id", "source", "author", "kind", "task_ref", "grants", "details"},
+        label="authority events",
+    )
+    capabilities = _records_by_id(
+        host_capabilities,
+        required_fields={"id", "source", "task_ref", "name", "value"},
+        label="host capabilities",
+    )
+    sessions = _records_by_id(
+        session_records,
+        required_fields={"id", "owner", "state"},
+        label="session records",
+    )
+    for session in sessions.values():
+        if session["owner"] != "coordinator" or session["state"] not in {"ACTIVE", "one_shot_running"}:
+            fail("session records contain invalid lineage evidence")
+    allowed_sources = {"user_request", "repository_instructions", "host_policy"}
+    expected_authors = {
+        "user_request": "user",
+        "repository_instructions": "repository",
+        "host_policy": "host",
+    }
+    for event in authorities.values():
+        if (
+            event["source"] not in allowed_sources
+            or event["author"] != expected_authors.get(event["source"])
+            or not isinstance(event["kind"], str)
+            or not event["kind"]
+            or not isinstance(event["task_ref"], str)
+            or not event["task_ref"]
+            or not isinstance(event["grants"], list)
+            or not event["grants"]
+            or not all(isinstance(grant, str) and grant for grant in event["grants"])
+            or not isinstance(event["details"], dict)
+        ):
+            fail("authority events contain invalid evidence")
+    for capability in capabilities.values():
+        if (
+            capability["source"] != "host_policy"
+            or not isinstance(capability["task_ref"], str)
+            or not capability["task_ref"]
+            or capability["name"] != "direct_user_channel"
+            or not isinstance(capability["value"], bool)
+        ):
+            fail("host capabilities contain invalid evidence")
+
+    role = dispatch["role"]
+    if role not in {"leaf", "child_coordinator"}:
+        fail("delegation has an invalid role")
+    if dispatch["session_token"] is not False or dispatch["close_question"] is not False:
+        fail("initial delegation contains local Relay lifecycle state")
+    if not isinstance(dispatch["parent_session_ref"], str) or not dispatch["parent_session_ref"].strip():
+        fail("delegation lacks a parent session reference")
+    if dispatch["parent_session_ref"] not in sessions:
+        fail("delegation cites an unknown parent session")
+    target_task_ref = dispatch["target_task_ref"]
+    if not isinstance(target_task_ref, str) or not target_task_ref.strip():
+        fail("delegation lacks a target task reference")
+
+    authority_refs = dispatch["authority_refs"]
+    if (
+        not isinstance(authority_refs, list)
+        or not authority_refs
+        or not all(isinstance(reference, str) and reference for reference in authority_refs)
+        or len(set(authority_refs)) != len(authority_refs)
+        or any(reference not in authorities for reference in authority_refs)
+    ):
+        fail("delegation cites missing authority evidence")
+    allowed_authority_tasks = {target_task_ref, dispatch["parent_session_ref"], "global"}
+    if any(authorities[reference]["task_ref"] not in allowed_authority_tasks for reference in authority_refs):
+        fail("delegation cites authority evidence from another task")
+    has_scope_authority = any(
+        authorities[reference]["kind"] in {"scope_authority", "explicit_relay_activation"}
+        and "delegated_scope" in authorities[reference]["grants"]
+        and authorities[reference]["task_ref"] in {target_task_ref, "global"}
+        for reference in authority_refs
+    )
+
+    if role == "leaf":
+        if (
+            dispatch["relay_invocation"] is not False
+            or dispatch["explicit_relay_grant_ref"] is not None
+            or dispatch["relay_scope"] is not None
+            or dispatch["local_agent_budget"] is not None
+            or dispatch["direct_user_channel_ref"] is not None
+            or dispatch["close_confirmation_actor"] is not None
+            or dispatch["parent_may_confirm_close"] is not None
+        ):
+            fail("ordinary leaf delegation attempts nested Relay coordination")
+        if not has_scope_authority:
+            fail("delegation lacks trusted scope authority")
+    else:
+        grant_ref = dispatch["explicit_relay_grant_ref"]
+        budget = dispatch["local_agent_budget"]
+        activation_event = authorities.get(grant_ref) if isinstance(grant_ref, str) else None
+        if (
+            dispatch["relay_invocation"] is not True
+            or activation_event is None
+            or grant_ref not in authority_refs
+            or activation_event.get("source") != "user_request"
+            or activation_event.get("author") != "user"
+            or activation_event.get("kind") != "explicit_relay_activation"
+            or activation_event.get("task_ref") != target_task_ref
+            or "relay_activation" not in activation_event.get("grants", [])
+            or dispatch["relay_scope"] not in {"live", "one_shot"}
+        ):
+            fail("child coordinator lacks trusted explicit Relay activation")
+        if not has_scope_authority:
+            fail("delegation lacks trusted scope authority")
+        if not isinstance(budget, dict) or set(budget) != {
+            "mode", "ceiling", "accounting_scope", "aggregate_reported", "budget_ref",
+        }:
+            fail("child coordinator lacks a local agent budget")
+        if budget["mode"] == "EXACT":
+            if not isinstance(budget["ceiling"], int) or isinstance(budget["ceiling"], bool) or budget["ceiling"] <= 0:
+                fail("child coordinator has an invalid exact ceiling")
+        elif budget["mode"] == "OPEN":
+            if budget["ceiling"] is not None:
+                fail("open child coordinator budget must not invent a ceiling")
+        else:
+            fail("child coordinator budget has invalid accounting scope")
+        budget_event = authorities.get(budget.get("budget_ref")) if isinstance(budget, dict) else None
+        expected_budget_task = (
+            dispatch["parent_session_ref"]
+            if isinstance(budget, dict) and budget.get("accounting_scope") == "root"
+            else target_task_ref
+        )
+        if (
+            budget["mode"] not in {"EXACT", "OPEN"}
+            or budget["accounting_scope"] not in {"root", "child"}
+            or budget["aggregate_reported"] is not True
+            or budget_event is None
+            or budget["budget_ref"] not in authority_refs
+            or budget_event.get("source") != "user_request"
+            or budget_event.get("author") != "user"
+            or budget_event.get("kind") != "agent_budget"
+            or budget_event.get("task_ref") != expected_budget_task
+            or "agent_budget" not in budget_event.get("grants", [])
+            or budget_event.get("details") != {
+                "mode": budget["mode"],
+                "ceiling": budget["ceiling"],
+                "accounting_scope": budget["accounting_scope"],
+            }
+        ):
+            fail("child coordinator budget has invalid accounting scope")
+        direct_ref = dispatch["direct_user_channel_ref"]
+        direct_capability = capabilities.get(direct_ref) if isinstance(direct_ref, str) else None
+        if dispatch["relay_scope"] == "live":
+            if (
+                direct_capability is None
+                or direct_capability.get("task_ref") != target_task_ref
+                or direct_capability.get("value") is not True
+            ):
+                fail("live child coordinator lacks trusted direct user channel evidence")
+            if (
+                dispatch["close_confirmation_actor"] != "user"
+                or dispatch["parent_may_confirm_close"] is not False
+            ):
+                fail("live child close confirmation is not reserved for the user")
+        elif (
+            direct_ref is not None
+            and (
+                direct_capability is None
+                or direct_capability.get("task_ref") != target_task_ref
+            )
+        ):
+            fail("one-shot child cites invalid direct user channel evidence")
+        elif (
+            dispatch["close_confirmation_actor"] is not None
+            or dispatch["parent_may_confirm_close"] is not None
+        ):
+            fail("one-shot child invents a close-confirmation lifecycle")
+
+    actions = dispatch["special_actions"]
+    if not isinstance(actions, list):
+        fail("delegation special actions must be a list")
+    for action in actions:
+        if not isinstance(action, dict) or set(action) != {"name", "grant_refs"}:
+            fail("delegation special action is malformed")
+        grant_refs = action["grant_refs"]
+        if (
+            not isinstance(action["name"], str)
+            or not action["name"]
+            or not isinstance(grant_refs, list)
+            or not grant_refs
+            or not all(isinstance(reference, str) and reference for reference in grant_refs)
+            or not set(grant_refs).issubset(authority_refs)
+            or any(
+                authorities[reference]["kind"] != "action_authority"
+                or f"action:{action['name']}" not in authorities[reference]["grants"]
+                or authorities[reference]["task_ref"] not in {target_task_ref, "global"}
+                for reference in grant_refs
+            )
+        ):
+            fail("delegation special action lacks inherited authority")
+
+
+def validate_user_facing_boundary(output: dict[str, object]) -> None:
+    """Reject internal payloads while permitting requested, redacted evidence excerpts."""
+    required = {
+        "internal_payload_kinds", "evidence_excerpts", "required_host_controls",
+        "resume_token", "synthesis_sections", "task_session_ref", "text",
+    }
+    if set(output) != required:
+        fail("user-facing output boundary has invalid fields")
+    task_session_ref = output["task_session_ref"]
+    if not isinstance(task_session_ref, str) or not task_session_ref.strip():
+        fail("user-facing output lacks its task session reference")
+    user_text = output["text"]
+    if not isinstance(user_text, str) or not user_text.strip():
+        fail("user-facing output lacks natural-language text")
+    scan_text = re.sub(r"\*\*([^*\n]+)\*\*", r"\1", user_text)
+    scan_text = re.sub(r"__([^_\n]+)__", r"\1", scan_text)
+    scan_text = re.sub(r"`([^`\n]+)`", r"\1", scan_text)
+    scan_text = re.sub(
+        r"(?<!\w)(\*{1,3}|_{1,3})([^*_\n]+)\1(?=\s*:)",
+        r"\2",
+        scan_text,
+    )
+
+    decoder = json.JSONDecoder()
+    contains_json_payload = False
+    for marker in re.finditer(r"[\[{]", scan_text):
+        try:
+            value, _ = decoder.raw_decode(scan_text[marker.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, (dict, list)):
+            contains_json_payload = True
+            break
+
+    packet_fields = {
+        match.group(1).lower().replace("-", "_").replace(" ", "_")
+        for match in re.finditer(
+            r"(?im)^\s*(status|role|requirement[_ -]?revision|summary|evidence|"
+            r"changed[_ -]?paths|commands[_ -]?and[_ -]?side[_ -]?effects|"
+            r"worktree[_ -]?or[_ -]?branch|decisions|risks|next[_ -]?action)\s*:",
+            scan_text,
+        )
+    }
+    compact_packet_fields = {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(STATUS|ROLE|REQUIREMENT_REVISION|SUMMARY|EVIDENCE|CHANGED_PATHS|"
+            r"COMMANDS_AND_SIDE_EFFECTS|WORKTREE_OR_BRANCH|DECISIONS|RISKS|NEXT_ACTION)\s*:",
+            scan_text,
+        )
+    }
+    tool_payload_fields = {
+        match.group(1).lower()
+        for match in re.finditer(
+            r"(?im)^\s*(tool|arguments|parameters|payload|schema|thread[_-]?id|tool[_-]?call)\s*:",
+            scan_text,
+        )
+    }
+    exposes_internal_key = re.search(
+        r"(?i)\b(?:tool[_-]?call|thread[_-]?id|task[_-]?session[_-]?ref|"
+        r"internal[_-]?payload[_-]?kinds|resume[_-]?token|relay[_-]?resume)\b",
+        scan_text,
+    )
+    exposes_lifecycle_token = re.search(
+        r"(?i)\b(?:resume|session|continuation)\b[^\n]{0,48}\btoken\b|"
+        r"\btoken\b[^\n]{0,48}\b(?:resume|session|continuation)\b",
+        scan_text,
+    )
+    exposes_raw_lifecycle_serialization = bool(
+        re.search(r"(?i)\brelay-v\d+\s*:", scan_text)
+        or re.search(
+            r"(?is)(?<![\w-])(?:s|rev|count|used|handles|tree|close)\s*="
+            r"[^;\n`]*(?:;|\n)\s*"
+            r"(?:s|rev|count|used|handles|tree|close)\s*=",
+            scan_text,
+        )
+    )
+    exposes_wrapper = re.search(
+        r"(?is)<\s*/?\s*[a-z][\w:.-]*(?:\s+[^<>]*?)?\s*/?>",
+        scan_text,
+    )
+    if (
+        contains_json_payload
+        or len(packet_fields) >= 2
+        or len(compact_packet_fields) >= 2
+        or len(tool_payload_fields) >= 2
+        or exposes_internal_key
+        or exposes_lifecycle_token
+        or exposes_raw_lifecycle_serialization
+        or exposes_wrapper
+    ):
+        fail("user-facing text exposes an internal payload signature")
+
+    payloads = output["internal_payload_kinds"]
+    if not isinstance(payloads, list) or not all(isinstance(kind, str) for kind in payloads):
+        fail("user-facing payload kinds must be a list")
+    if payloads:
+        fail("user-facing output exposes an internal payload")
+
+    excerpts = output["evidence_excerpts"]
+    if not isinstance(excerpts, list):
+        fail("user-facing evidence excerpts must be a list")
+    for excerpt in excerpts:
+        if (
+            not isinstance(excerpt, dict)
+            or set(excerpt) != {"kind", "explicitly_requested", "redacted"}
+            or excerpt["kind"] not in {"worker_handoff", "command_evidence"}
+            or excerpt["explicitly_requested"] is not True
+            or excerpt["redacted"] is not True
+        ):
+            fail("user-facing evidence excerpt is not explicitly requested and redacted")
+
+    controls = output["required_host_controls"]
+    if not isinstance(controls, list):
+        fail("required host controls must be a list")
+    for control in controls:
+        if (
+            not isinstance(control, dict)
+            or set(control) != {"host_required", "exact_host_form", "duplicated_in_prose"}
+            or control["host_required"] is not True
+            or control["exact_host_form"] is not True
+            or control["duplicated_in_prose"] is not False
+        ):
+            fail("host control syntax is not isolated from user-facing prose")
+
+    token = output["resume_token"]
+    if token is not None:
+        allowed_unfinished_state = {
+            "active_work", "queued_work", "held_work",
+            "nonterminal_handle", "pending_close",
+        }
+        if (
+            not isinstance(token, dict)
+            or set(token) != {
+                "origin", "fallback_required", "single_line", "serialization",
+                "contains_raw_payload", "contains_ledger_fields", "markdown_code",
+                "unfinished_state", "issued_by_runtime", "redeemable", "rendered",
+                "session_ref",
+            }
+            or token["origin"] != "coordinator"
+            or token["fallback_required"] is not True
+            or token["single_line"] is not True
+            or token["serialization"] != "opaque_handle"
+            or token["contains_raw_payload"] is not False
+            or token["contains_ledger_fields"] is not False
+            or token["markdown_code"] is not False
+            or token["issued_by_runtime"] is not True
+            or token["redeemable"] is not True
+            or not isinstance(token["unfinished_state"], list)
+            or not token["unfinished_state"]
+            or not all(reason in allowed_unfinished_state for reason in token["unfinished_state"])
+            or len(set(token["unfinished_state"])) != len(token["unfinished_state"])
+            or not isinstance(token["rendered"], str)
+            or not re.fullmatch(r"[A-Za-z0-9._~-]{24,512}", token["rendered"])
+            or token["session_ref"] != task_session_ref
+        ):
+            fail("resume token is not an opaque coordinator-only fallback for unfinished state")
+
+    sections = output["synthesis_sections"]
+    minimum = {"outcome", "evidence", "changed_paths", "checks", "risks", "next_action"}
+    if (
+        not isinstance(sections, list)
+        or not all(isinstance(section, str) for section in sections)
+        or not minimum.issubset(sections)
+    ):
+        fail("user-facing output lacks the natural-language synthesis")
 
 
 def canonical_owned_path(value: object, root: Path = ROOT) -> str:
@@ -249,6 +706,35 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
         fail(f"one-shot completion lacks interval-timeout coverage: {transcript_id}")
 
 
+def writer_state_before_step(
+    writer_id: str,
+    dispatch_step: int,
+    steps: list[dict[str, object]],
+    boundary_step: int,
+) -> str:
+    """Replay one writer's current state immediately before a later step."""
+    state = "planned"
+    for index, step in enumerate(steps[:boundary_step - 1], start=1):
+        tokens = set(step["expect"])
+        if index == dispatch_step:
+            state = "active"
+        if f"{writer_id}_terminal" in tokens and state == "active":
+            state = "terminal"
+        if f"{writer_id}_audited" in tokens and state == "terminal":
+            state = "terminal_audited"
+        if f"{writer_id}_reactivated_with_followup" in tokens:
+            state = "active"
+        if (
+            INTEGRATION_TOKENS.intersection(tokens)
+            and step.get("integrated_writer_ids") == [writer_id]
+            and state == "terminal_audited"
+        ):
+            state = "integrated"
+        if f"{writer_id}_abandoned" in tokens and state == "terminal_audited":
+            state = "abandoned"
+    return state
+
+
 def validate_writer_dispatches(transcript: dict[str, object]) -> None:
     transcript_id = transcript["id"]
     steps = transcript["steps"]
@@ -356,21 +842,10 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
                 fail(f"invalid writer serialization dependency: {transcript_id}")
             if by_id[dependency]["step"] >= step_number:
                 fail(f"serialized writer was not dispatched later: {transcript_id}")
-            dependency_dispatch_step = by_id[dependency]["step"]
-            terminal_indexes = [
-                index
-                for index, prior in enumerate(steps[:step_number - 1], start=1)
-                if index > dependency_dispatch_step
-                and prior["event"] in {"worker_result", "notification_wake", "delivery_batch"}
-                and f"{dependency}_terminal" in prior["expect"]
-            ]
-            audit_indexes = [
-                index
-                for index, prior in enumerate(steps[:step_number - 1], start=1)
-                if prior["event"] == "coordinator"
-                and f"{dependency}_audited" in prior["expect"]
-            ]
-            if not any(terminal < audit for terminal in terminal_indexes for audit in audit_indexes):
+            dependency_state = writer_state_before_step(
+                dependency, by_id[dependency]["step"], steps, step_number,
+            )
+            if dependency_state not in {"terminal_audited", "integrated", "abandoned"}:
                 fail(f"serialized writer started before terminal audit: {transcript_id}")
         if dispatch["isolation"] == "worktree":
             approval_steps = [
@@ -484,45 +959,13 @@ def validate_writer_dispatches(transcript: dict[str, object]) -> None:
     def isolated_predecessor_settled_before_shared(
         isolated_id: str, shared_dispatch: dict[str, object]
     ) -> bool:
-        prior_steps = steps[:shared_dispatch["step"] - 1]
-        isolated_dispatch_step = by_id[isolated_id]["step"]
-        terminal_indexes = [
-            index
-            for index, step in enumerate(prior_steps, start=1)
-            if index > isolated_dispatch_step
-            and step["event"] in {"worker_result", "notification_wake", "delivery_batch"}
-            and f"{isolated_id}_terminal" in step["expect"]
-        ]
-        audit_indexes = [
-            index
-            for index, step in enumerate(prior_steps, start=1)
-            if step["event"] == "coordinator"
-            and f"{isolated_id}_audited" in step["expect"]
-        ]
-        integrated_indexes = [
-            index
-            for index, step in enumerate(prior_steps, start=1)
-            if step["event"] == "coordinator"
-            and INTEGRATION_TOKENS.intersection(step["expect"])
-            and step.get("integrated_writer_ids") == [isolated_id]
-        ]
-        resolution_tokens = {
-            f"{isolated_id}_abandoned",
-            f"{isolated_id}_reconciled_into_shared_base",
-        }
-        resolution_indexes = [
-            index
-            for index, step in enumerate(prior_steps, start=1)
-            if step["event"] == "coordinator"
-            and resolution_tokens.intersection(step["expect"])
-        ]
-        settlement_indexes = integrated_indexes + resolution_indexes
-        return any(
-            terminal < audit < settlement
-            for terminal in terminal_indexes
-            for audit in audit_indexes
-            for settlement in settlement_indexes
+        state = writer_state_before_step(
+            isolated_id,
+            by_id[isolated_id]["step"],
+            steps,
+            shared_dispatch["step"],
         )
+        return state in {"integrated", "abandoned"}
 
     for index, writer_id in enumerate(writer_ids):
         for other_id in writer_ids[index + 1:]:
@@ -758,73 +1201,127 @@ INTEGRATION_TOKENS = {
 
 
 def validate_writer_integrations(transcript: dict[str, object]) -> None:
-    """Require one terminal, audited isolated writer per integration operation."""
+    """Require current terminal/audited state and explicit settlement per overlap member."""
     transcript_id = transcript["id"]
     steps = transcript["steps"]
     dispatches_by_id = {
         dispatch["id"]: dispatch for dispatch in transcript.get("writer_dispatches", [])
     }
-    already_integrated: set[str] = set()
+    writer_state = {writer_id: "planned" for writer_id in dispatches_by_id}
     integration_step_by_id: dict[str, int] = {}
+    settlement_step_by_id: dict[str, int] = {}
+    verification_step_by_group: dict[str, int] = {}
+    verification_required = {
+        "overlap_group_verified", "combined_diff_audited",
+        "combined_contracts_validated", "targeted_tests_pass",
+    }
     for index, step in enumerate(steps, start=1):
-        markers = INTEGRATION_TOKENS.intersection(step["expect"])
+        step_tokens = set(step["expect"])
+        markers = INTEGRATION_TOKENS.intersection(step_tokens)
         writer_ids = step.get("integrated_writer_ids")
+        for writer_id, dispatch in dispatches_by_id.items():
+            if dispatch["step"] == index:
+                writer_state[writer_id] = "active"
+
+            terminal_token = f"{writer_id}_terminal"
+            audited_token = f"{writer_id}_audited"
+            reactivated_token = f"{writer_id}_reactivated_with_followup"
+            abandoned_token = f"{writer_id}_abandoned"
+            reconciled_token = f"{writer_id}_reconciled_into_shared_base"
+
+            if terminal_token in step_tokens:
+                if (
+                    step["event"] not in {"worker_result", "notification_wake", "delivery_batch"}
+                    or writer_state[writer_id] != "active"
+                ):
+                    fail(f"writer terminal marker does not match current state: {transcript_id}")
+                writer_state[writer_id] = "terminal"
+            if audited_token in step_tokens:
+                if step["event"] != "coordinator" or writer_state[writer_id] != "terminal":
+                    fail(f"writer audit does not follow its current terminal result: {transcript_id}")
+                writer_state[writer_id] = "terminal_audited"
+            if reactivated_token in step_tokens:
+                if (
+                    step["event"] != "coordinator"
+                    or writer_state[writer_id] not in {"terminal", "terminal_audited", "integrated", "abandoned"}
+                ):
+                    fail(f"writer reactivation does not match current state: {transcript_id}")
+                writer_state[writer_id] = "active"
+            if abandoned_token in step_tokens:
+                if (
+                    reconciled_token in step_tokens
+                    or step["event"] != "coordinator"
+                    or writer_state[writer_id] != "terminal_audited"
+                ):
+                    fail(f"writer settlement does not follow current terminal audit: {transcript_id}")
+                writer_state[writer_id] = "abandoned"
+                settlement_step_by_id[writer_id] = index
+            if reconciled_token in step_tokens and (
+                step["event"] != "coordinator"
+                or not markers
+                or writer_ids != [writer_id]
+            ):
+                fail(f"reconciled writer must use a complete integration operation: {transcript_id}")
+
         if not markers:
             if writer_ids is not None:
                 fail(f"integrated writer ids appear without an integration operation: {transcript_id}")
-            continue
-        if (
-            step["event"] != "coordinator"
-            or not isinstance(writer_ids, list)
-            or len(writer_ids) != 1
-            or not isinstance(writer_ids[0], str)
-            or not writer_ids[0]
-        ):
-            fail(f"integration must name exactly one writer: {transcript_id}")
+        else:
+            if (
+                step["event"] != "coordinator"
+                or not isinstance(writer_ids, list)
+                or len(writer_ids) != 1
+                or not isinstance(writer_ids[0], str)
+                or not writer_ids[0]
+            ):
+                fail(f"integration must name exactly one writer: {transcript_id}")
 
-        writer_id = writer_ids[0]
-        dispatch = dispatches_by_id.get(writer_id)
-        if (
-            dispatch is None
-            or dispatch["isolation"] != "worktree"
-            or dispatch["step"] >= index
-            or writer_id in already_integrated
-        ):
-            fail(f"integration names an invalid isolated writer: {transcript_id}")
-        prior_tokens = set().union(*(set(prior["expect"]) for prior in steps[:index - 1]))
-        if {
-            f"{writer_id}_abandoned", f"{writer_id}_reconciled_into_shared_base",
-        }.intersection(prior_tokens):
-            fail(f"settled isolated writer was integrated again: {transcript_id}")
+            writer_id = writer_ids[0]
+            dispatch = dispatches_by_id.get(writer_id)
+            if (
+                dispatch is None
+                or dispatch["isolation"] != "worktree"
+                or dispatch["step"] >= index
+                or writer_id in integration_step_by_id
+            ):
+                fail(f"integration names an invalid isolated writer: {transcript_id}")
+            if writer_state[writer_id] != "terminal_audited":
+                fail(f"writer is not currently terminal and audited before integration: {transcript_id}")
+            if not {
+                "patch_applied_from_recorded_base", "no_whole_file_overwrite",
+            }.issubset(step_tokens):
+                fail(f"isolated writer integration lacks recorded-base patch safety: {transcript_id}")
+            writer_state[writer_id] = "integrated"
+            integration_step_by_id[writer_id] = index
+            settlement_step_by_id[writer_id] = index
 
-        terminal_token = f"{writer_id}_terminal"
-        audited_token = f"{writer_id}_audited"
-        terminal_indexes = [
-            prior_index
-            for prior_index, prior in enumerate(steps[:index - 1], start=1)
-            if dispatch["step"] < prior_index
-            and prior["event"] in {"worker_result", "notification_wake", "delivery_batch"}
-            and terminal_token in prior["expect"]
-        ]
-        audit_indexes = [
-            prior_index
-            for prior_index, prior in enumerate(steps[:index - 1], start=1)
-            if prior["event"] == "coordinator" and audited_token in prior["expect"]
-        ]
-        if not any(terminal < audit for terminal in terminal_indexes for audit in audit_indexes):
-            fail(f"writer integrated before terminal result and coordinator audit: {transcript_id}")
-        already_integrated.add(writer_id)
-        integration_step_by_id[writer_id] = index
+        verified_group_ids = step.get("verified_overlap_group_ids")
+        has_verification_marker = bool(verification_required.intersection(step_tokens))
+        if verified_group_ids is not None or has_verification_marker:
+            if (
+                step["event"] != "coordinator"
+                or not verification_required.issubset(step_tokens)
+                or not isinstance(verified_group_ids, list)
+                or not verified_group_ids
+                or not all(isinstance(group_id, str) and group_id for group_id in verified_group_ids)
+                or len(set(verified_group_ids)) != len(verified_group_ids)
+            ):
+                fail(f"controlled-overlap group lacks combined verification evidence: {transcript_id}")
+            for group_id in verified_group_ids:
+                if group_id in verification_step_by_group:
+                    fail(f"overlap group was verified more than once: {transcript_id}")
+                verification_step_by_group[group_id] = index
 
     for group in transcript.get("overlap_groups", []):
         order = group["integration_order"]
-        integrated_order = [writer_id for writer_id in order if writer_id in integration_step_by_id]
+        writer_ids = group["writer_ids"]
+        integrated_order = [writer_id for writer_id in order if writer_state[writer_id] == "integrated"]
         actual_order = [
             writer_id for writer_id, _ in sorted(
                 integration_step_by_id.items(), key=lambda item: item[1]
-            ) if writer_id in set(order)
+            ) if writer_id in set(writer_ids)
         ]
-        if integrated_order != order[:len(integrated_order)] or actual_order != integrated_order:
+        if actual_order != integrated_order:
             fail(f"controlled-overlap integration order was not preserved: {transcript_id}")
         for position, writer_id in enumerate(integrated_order):
             step = steps[integration_step_by_id[writer_id] - 1]
@@ -842,18 +1339,20 @@ def validate_writer_integrations(transcript: dict[str, object]) -> None:
                 })
             if not required.issubset(step["expect"]):
                 fail(f"later controlled-overlap integration lacks reconciliation evidence: {transcript_id}")
-        if len(integrated_order) == len(order):
-            last_integration = max(integration_step_by_id[writer_id] for writer_id in order)
-            if not any(
-                index > last_integration
-                and step["event"] == "coordinator"
-                and {
-                    "overlap_group_verified", "combined_diff_audited",
-                    "combined_contracts_validated", "targeted_tests_pass",
-                }.issubset(step["expect"])
-                for index, step in enumerate(steps, start=1)
-            ):
-                fail(f"completed controlled-overlap group lacks combined verification: {transcript_id}")
+        settled_states = {"integrated", "abandoned"}
+        all_settled = all(writer_state[writer_id] in settled_states for writer_id in writer_ids)
+        verification_step = verification_step_by_group.get(group["id"])
+        if verification_step is not None:
+            if not all_settled:
+                fail(f"controlled-overlap group was verified before every writer was settled: {transcript_id}")
+            if verification_step <= max(settlement_step_by_id[writer_id] for writer_id in writer_ids):
+                fail(f"controlled-overlap group was verified before final settlement: {transcript_id}")
+        elif integrated_order and all_settled:
+            fail(f"settled controlled-overlap group lacks combined verification: {transcript_id}")
+
+    known_group_ids = {group["id"] for group in transcript.get("overlap_groups", [])}
+    if not set(verification_step_by_group).issubset(known_group_ids):
+        fail(f"overlap verification names an unknown group: {transcript_id}")
 
 
 def validate_dirty_path_flow(transcript: dict[str, object]) -> None:
@@ -1027,19 +1526,84 @@ def validate_dirty_path_flow(transcript: dict[str, object]) -> None:
                 fail(f"isolated work integrated over protected dirty user paths: {transcript_id}")
 
 
+def validate_ambiguous_live_activation(transcript: dict[str, object]) -> None:
+    """Keep a bare ambiguous activation visible without leaking empty lifecycle state."""
+    if (
+        transcript.get("scope") != "live"
+        or transcript.get("initial_state") != "OFF"
+        or transcript.get("final_state") != "ACTIVE"
+        or not isinstance(transcript.get("steps"), list)
+        or len(transcript["steps"]) != 2
+    ):
+        fail("ambiguous bare invocation must open visibly without empty lifecycle artifacts")
+    ambiguous_user, ambiguous_reply = transcript["steps"]
+    user_tokens = set(ambiguous_user.get("expect", []))
+    reply_tokens = set(ambiguous_reply.get("expect", []))
+    required_user = {
+        "bare_explicit_invocation", "ambiguous_activation_intent",
+        "no_current_objective", "default_live_scope", "OFF_to_ACTIVE",
+    }
+    required_reply = {
+        "activation_acknowledgement", "live_session_opened_plain_language",
+        "request_next_task", "zero_nonterminal_handles",
+        "handle_continuity_vacuously_satisfied", "no_ledger_output",
+        "no_session_token", "no_raw_lifecycle_serialization",
+        "no_markdown_code", "remain_ACTIVE",
+    }
+    forbidden_reply = {
+        "session_token", "portable_resume_payload", "ledger_generation_in_token",
+        "dispatch", "writer_dispatch", "ask_close", "completion_candidate",
+    }
+    if (
+        ambiguous_user.get("event") != "user"
+        or ambiguous_reply.get("event") != "coordinator"
+        or not required_user.issubset(user_tokens)
+        or not required_reply.issubset(reply_tokens)
+        or forbidden_reply.intersection(reply_tokens)
+    ):
+        fail("ambiguous bare invocation must open visibly without empty lifecycle artifacts")
+
+
+def validate_session_token_step(
+    tokens: set[str], event: str, agent_handles_persist: bool, transcript_id: str,
+) -> None:
+    """Require a runtime-issued opaque handle backed by genuine unfinished state."""
+    if event not in {"coordinator", "host_final"}:
+        fail(f"session token must be coordinator-authored: {transcript_id}")
+    required_token_shape = {
+        "portable_resume_payload", "ledger_generation_in_token",
+        "token_required_for_unfinished_state", "opaque_resume_handle",
+        "plain_text_resume_handle", "runtime_issued_redeemable_handle",
+        "no_raw_ledger_fields", "no_markdown_code",
+    }
+    unfinished_reasons = {
+        "active_work_pending", "queued_work_pending", "held_work_pending",
+        "nonterminal_handle_recorded", "pending_close_confirmation",
+    }
+    if (
+        not required_token_shape.issubset(tokens)
+        or not unfinished_reasons.intersection(tokens)
+    ):
+        fail(f"session token lacks opaque unfinished-state safeguards: {transcript_id}")
+    if not agent_handles_persist and "no_live_handle_at_yield" not in tokens:
+        fail(f"token yield may strand a live handle: {transcript_id}")
+
+
 def validate() -> None:
     text = SKILL.read_text(encoding="utf-8")
     metadata = frontmatter(text)
-    if set(metadata) != {"name", "description"}:
-        fail("frontmatter must contain only name and description")
+    if set(metadata) != {"name", "description", "license"}:
+        fail("frontmatter must contain only name, description, and license")
     if metadata["name"] != SKILL_DIR.name:
         fail("skill name must match its directory")
+    if metadata["license"] != "MIT":
+        fail("skill license must match the repository MIT license")
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", metadata["name"]):
         fail("skill name must use lowercase kebab-case")
     for phrase in (
         "EXPLICIT-ONLY",
         "parallel native subagents for large coding, research, audit, migration, and cross-module tasks",
-        "Use only when the user explicitly names or invokes Relay Orchestra",
+        "Use when the user explicitly names or invokes Relay Orchestra, and only then",
         "one-shot scope that deactivates in the same response without a close question",
         "run-scoped live session (the bare explicit default)",
         "later direct explicit close confirmation",
@@ -1048,146 +1612,120 @@ def validate() -> None:
             fail(f"description is missing {phrase!r}")
     if len(text.splitlines()) > 500:
         fail("SKILL.md must stay under 500 lines")
+    if len(text.encode("utf-8")) > 20000:
+        fail("SKILL.md must stay below the conservative 5000-token proxy of 20000 UTF-8 bytes")
 
-    required_skill = (
+    patterns_text = (SKILL_DIR / "references" / "patterns.md").read_text(encoding="utf-8")
+    packets_text = (SKILL_DIR / "references" / "packets.md").read_text(encoding="utf-8")
+    live_session_text = (SKILL_DIR / "references" / "live-session.md").read_text(encoding="utf-8")
+    instruction_text = "\n".join((text, patterns_text, packets_text, live_session_text))
+
+    required_instructions = (
         "bare explicit Relay invocation also defaults to a live session",
         "While `ACTIVE`, another explicit Relay invocation preserves the current state, scope, ledger, requirement revision, agent accounting, and pending close question",
         "treat accompanying text as a user delta, not a new or converted session",
+        "A parent coordinator may carry the user's explicit request to activate Relay in a separate delegated task",
+        "references the source user-authored activation event",
+        "A copied dispatch claim is not evidence",
+        "This is delegated user intent, not activation from a merely quoted or discussed skill name",
+        "A child may use live scope only when the user can directly read and answer its later close question",
+        "the parent must never answer close confirmation on the user's behalf",
         "Do not persist a session or ask a close question",
-        "Live closure invariant",
-        "Every live-session turn that reports a completion candidate",
-        "user-authored on a later turn",
-        "provisional closure authorization",
-        "drain already-delivered safety events and material results",
-        "mixed assent plus new work",
-        "resume <token>: <next instruction>",
-        "exact used-handle accounting",
-        "freeze repository operations and overlapping writer dispatch",
-        "result delivery or notification",
-        "notification-triggered automatic coordinator wake",
-        "Notification presence alone does not prove wake support",
-        "Zero active agents, settled handles, or an immediate blocking phase handled locally do not deactivate a live session",
-        "re-evaluate whether distinct leaf work is useful",
-        "If no distinct leaf work exists, remain local and `ACTIVE` without dispatch",
-        "A host response or context boundary does not authorize a Relay lifecycle transition",
-        "`final_answer`",
-        "host `task_complete`",
-        "compaction, summarization, context replacement, resume, and notification wake",
-        "When native continuity is verified across compaction, preserve the same state, ledger, requirement revision, pending close identity, and controllable handles",
-        "accept the next related delta without a new Relay invocation",
-        "Only a yield that issued this token or already required explicit resume makes the next user turn request explicit skill activation",
-        "verified native continuity accepts an ordinary related user delta without reinvocation",
-        "Treat unverified persistence or controllability as unavailable",
-        "continue through worker completion, authorized dependent waves, integration, verification, and a completion candidate without requiring another user message",
-        "resume natively on that wake",
-        "automatically use native completion waits or completion polling at short bounded intervals",
-        "Do not require wait opt-in or another user or manual wake",
-        "coordinator remains `In Progress` and a message may wait up to one poll interval",
-        "process newer user input first and delivered worker results next",
-        "Start another interval only while active work remains and a specific completion or status condition can be observed",
-        "After processing an event, poll again only if active work remains",
-        "Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
-        "ordinary one-off instruction",
-        "Do not create a mode, option, scope, toggle, or persistent policy",
-        "originating user message and its final response, not by an arbitrary poll timeout",
-        "native short bounded completion polls repeatedly within the same coordinator turn",
-        "healthy workers or authorized dependent work remain",
-        "A normal interval timeout is a scheduling tick, not the one-shot task deadline",
-        "Never interrupt healthy workers solely because one interval elapsed",
-        "Complete normally only after all workers are terminal and synthesis is complete",
-        "Stop earlier only when the user explicitly cancels or redirects",
-        "a user-specified overall limit is reached",
-        "a genuine host or runtime blocker prevents progress",
-        "Settle all controllable workers before the one-shot final response",
-        "no cross-turn persistence",
-        "all controllable workers are closed",
-        "distinct hand-back question",
-        "Working without worktree isolation",
-        "Use the shared tree for read-only agents and plans with at most one active writer",
-        "Treat every pre-existing or unattributed dirty path as user-owned until it is audited",
-        "Recommend an approved worktree even for one writer when the tree is dirty, attribution is unreliable, independent builds are needed, or the work is long-running",
-        "it never authorizes integration over them",
-        "Any authorization must name the exact canonical dirty paths it covers and leaves every other dirty path protected",
-        "Re-inspect shared-tree status while a writer is nonterminal and before its result audit",
-        "A writer that was already terminal before the dirty change appeared does not create this race",
-        "Integrate exactly one isolated writer per operation, only after that writer is terminal and the coordinator has audited its result",
-        "Record the writer ID, re-inspect shared-tree status",
-        "Block only an overlapping stream; an independent stream may integrate",
-        "Ownership narrowing can resolve a dirty-path overlap only before isolated work has produced changes on it",
-        "make one isolated worktree per concurrent writer the default execution plan",
-        "This planning default is not permission to create or use a worktree",
-        "While approval is pending, dispatch no writers that could run concurrently",
-        "record a distinct checkout ID and confirmed base revision for each isolated writer",
-        "shared writers have no checkout ID",
-        "If isolated worktrees are unavailable or declined, serialize writers in the shared tree",
-        "Start the next writer only after the previous writer is terminal and its actual changes are audited",
-        "Before dispatching a shared-tree writer on any overlapping path, integrate that patch, explicitly reconcile it into the shared base, or explicitly abandon it",
-        "Record this disposition only after the isolated writer is terminal or cancelled and its actual result is audited",
-        "Terminal and audited status alone is not enough",
-        "Before every writer dispatch in any mode, record its exact owned paths, logical edit scope, expected interfaces, and invariants",
-        "They permit planned same-path execution",
-        "three-way diff; never replace the whole file with a later worktree copy",
-        "A clean Git merge is not proof of semantic compatibility",
-        "Ask the user only when requirements are genuinely ambiguous or mutually exclusive",
-        "The resolver returns a reconciliation patch or instructions; the coordinator remains the integration authority",
-        "validate the combined interfaces and invariants",
-        "do not prevent semantic, API, schema, external-state, or integration conflicts",
-        "The skill imposes no fixed maximum",
-        "fifteen agents",
-        "Do not silently reduce",
-        "Never reject a relevant update",
-        "Live Run Ledger",
-        "completion candidates do not deactivate it",
-        "Do not switch to worktree mode silently",
+        "Use only `ACTIVE -> STOPPING -> OFF`",
+        "A completion candidate remains `ACTIVE` and asks one close question",
+        "Host responses, `final` markers, task completion, compaction, summaries, resume, and notification wake are lifecycle-neutral",
+        "Background or invisible child coordinators must use one-shot scope",
+        "Before any dispatch or wait, read [live-session.md](references/live-session.md)",
+        "Check notification delivery and automatic wake separately",
+        "A live child requires a direct user channel; otherwise it is one-shot",
+        "When a bare invocation is ambiguous or provides no concrete current objective",
+        "say in ordinary language that the live session is open and will remain active",
+        "`ACTIVE` alone is not a reason to emit a continuity token",
+        "Only the coordinator emits a redeemable opaque handle as one plain-text line",
+        "never Markdown code, raw field/value serialization",
+        "Never use shell sleep, one long blind block, busy-polling, or polling without active work",
+        "Settle every controllable worker before a one-shot final",
+        "Maintain the compact coordinator ledger defined in [live-session.md](references/live-session.md)",
         "stable functional role",
         "completed-but-open handle",
-        "STATUS: DONE | BLOCKED | NEEDS_CONTEXT",
-        "COMMANDS_AND_SIDE_EFFECTS",
-        "deactivate Relay Orchestra",
-        "ACTIVE -> STOPPING -> OFF",
-        "persistence of loaded skill instructions across turns",
-        "compact non-secret session token",
-        "Treat a user-specified total as `EXACT`",
-        "Ask the user for a count delta",
-        "A result arriving after `OFF`",
-        "pending close confirmation",
-        "answer any non-close question never authorizes closure",
-        "A command to stop, cancel, or pause a task, workstream, worker, action, or direction is a work delta and leaves Relay `ACTIVE`",
-        "While `STOPPING`, preserve shutdown and do not absorb accompanying new work",
-        "Apply response mutations and replacement-token issuance before checking boundary continuity",
-        "every nonterminal handle remains controllable; zero nonterminal handles satisfies the handle condition",
-        "When the completion criteria appear satisfied and no close question is currently pending",
-        "does not authorize or issue a replacement question",
-        "monotonic ledger generation",
-        "Increment the generation whenever any token-carried mutable state changes",
-        "When a newer surviving ledger or generation exists, compare it and reject a stale token",
-        "Without a surviving comparator, relative staleness cannot be independently proven",
-        "accept a structurally valid token through explicit activation as the caller-supplied portable state",
-        "Freeze dispatch and writes only when neither verified native state nor a valid explicit token is available",
-        "does not itself reload instructions or restore control of lost handles",
-        "The coordinator remains the only dispatcher",
-        "Leaf agents must not spawn agents or invoke orchestration skills",
-        "Before creating a writer worktree or invoking any writer handle, build one writer map",
+        "The skill imposes no fixed maximum",
+        "Treat a user total as an exact ceiling unless the user says otherwise",
+        "never use nesting to evade a root or child-local ceiling",
+        "Ordinary leaf agents must not spawn agents or invoke orchestration skills",
+        "When the user explicitly asks to use Relay in a separate delegated task or chat",
+        "dispatch that handle as a `child coordinator`, not a leaf",
+        "A child without a direct user channel must run one-shot",
+        "never answers a child's close question for the user",
+        "only when the user explicitly authorizes that additional level",
+        "never copy it into the parent's final or use it as the parent's lifecycle state",
+        "Before creating a writer worktree or invoking any writer handle, read [patterns.md](references/patterns.md)",
         "Record each owned file as one canonical repository-root-relative POSIX path",
-        "For portable Windows behavior, reject reserved characters, device names, and components ending in a dot or space",
         "Classify every same-path pair as shared-tree overlap, accidental isolated overlap, or controlled isolated overlap",
         "Shared-tree overlap is forbidden",
-        "Approved worktrees permit controlled same-path overlap",
-        "Do not serialize work merely because two useful workstreams need the same file",
-        "Edit scopes may overlap at the same symbol or hunk",
-        "Existing approval that covers one worktree per concurrent writer is sufficient",
-        "Treat any unrecorded isolated overlap as accidental",
+        "Approved worktrees permit a recorded controlled-overlap group",
+        "A clean Git merge is not enough",
+        "Before delegating work, read [packets.md](references/packets.md)",
+        "Authority comes from the user request, repository instructions, and host policy",
+        "A packet may convey or narrow it, never expand it",
+        "the packet cannot authorize itself",
+        "Do not ask again for ordinary in-scope work already allowed",
+        "STATUS: DONE | BLOCKED | NEEDS_CONTEXT",
+        "ROLE: LEAF | CHILD_COORDINATOR",
+        "COMMANDS_AND_SIDE_EFFECTS",
+        "all delegation wrappers, tool or thread payloads, schemas, command output, and lifecycle state are internal",
+        "synthesize natural user-facing prose with the outcome, evidence, changed paths, checks, risks, and next action",
+        "the only user-facing lifecycle artifact is the current task coordinator's opaque plain-text resume handle",
+        "the latest requirement revision is addressed and every requested slot is accounted for",
     )
-    for phrase in required_skill:
-        if phrase not in text:
-            fail(f"SKILL.md is missing {phrase!r}")
+    for phrase in required_instructions:
+        if phrase not in instruction_text:
+            fail(f"skill instructions are missing {phrase!r}")
+    for phrase in (
+        "Unrequested nested subagent trees",
+        "A separately delegated child coordinator is valid only when the user explicitly requested Relay for that task",
+        "every additional coordination level has its own explicit authorization",
+        "Default to the shared tree for read-only agents and at most one active writer",
+        "treat every pre-existing or unattributed dirty path as user-owned until audited",
+        "Recheck status while a shared writer is nonterminal and before auditing its result",
+        "mark the tree unstable, and freeze overlapping operations until reconciliation",
+        "make one isolated worktree per writer the default plan",
+        "Do not dispatch concurrent writers while approval is pending",
+        "Record a globally distinct checkout ID and confirmed base revision for each isolated writer",
+        "If worktrees are unavailable or declined, serialize writers in the shared tree",
+        "settle the isolated patch first: integrate it, reconcile it into the shared base, or abandon it explicitly",
+        "Worktrees isolate checked-out files, not semantic, API, schema, external-state, or integration conflicts",
+        "Integrate exactly one isolated writer per operation after its terminal result and coordinator audit",
+        "Treat \"reconciled into the shared base\" as an integration operation, not a metadata-only settlement",
+        "Worktree approval alone never authorizes integration over dirty user paths",
+        "Block an overlapping stream, but allow an independent stream to integrate",
+        "Allow even same-hunk work when its parallel value justifies the merge cost",
+        "Prefer the recorded context-rich resolver for non-trivial same-hunk or cross-contract conflicts",
+        "Apply the first stream, then three-way reconcile later patches against the updated integration state",
+        "Treat a clean merge as insufficient evidence",
+        "test every integrated workstream, and report abandoned patches",
+    ):
+        if phrase not in patterns_text:
+            fail(f"patterns.md is missing {phrase!r}")
+    if "\n- Nested subagent trees\n" in patterns_text:
+        fail("patterns.md must not reject explicitly authorized child coordinators")
+    for phrase in (
+        "Read this reference before delegating work",
+        "Inherit authority from the current user request, repository instructions, and host policy",
+        "This packet may convey or narrow that authority, never expand it",
+        "resolve the parent session against the current coordinator ledger",
+        "an action grant cannot replace scope authority",
+        "The handoff packet is internal task-to-coordinator data, not a user-facing final template",
+        "Never expose delegation wrappers, tool or thread payloads, raw ledger state, or other lifecycle state",
+    ):
+        if phrase not in packets_text:
+            fail(f"packets.md is missing {phrase!r}")
     for coupled in ("Cavecrew", "Claude", "Codex", "OpenAI", "plugin"):
         if coupled in text:
             fail(f"portable SKILL.md must not couple to {coupled!r}")
 
     for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
-        if "://" not in target and not (SKILL_DIR / target).exists():
-            fail(f"broken local link: {target}")
+        if "://" not in target and not target.startswith("mailto:"):
+            validate_local_markdown_link(SKILL, target)
 
     openai = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
     for phrase in ("live $relay-orchestra session", "directly confirm closure in a later message", "allow_implicit_invocation: false"):
@@ -1231,8 +1769,21 @@ def validate() -> None:
         "Without worktree isolation, same-file writers still run one after another",
         "applies later same-file patches against the already updated code instead of replacing the whole file",
         "A clean Git merge is not enough",
+        "Ordinary delegated agents stay leaf workers",
+        "those tasks may become child coordinators with their own bounded scope and local lifecycle",
+        "Explicit nested coordination is supported",
+        "emits a resume token only when fallback continuity needs one",
+        "asks a close question only in a live task that you can answer directly",
+        "Invisible or background child tasks use one-shot scope",
+        "The parent reports aggregate child activity",
+        "applies each requested agent limit to its stated scope",
+        "supports cross-turn background work and verified automatic wake",
+        "Relay itself does not invent another confirmation for ordinary in-scope local work or repeat the same grant",
+        "The host or repository may still require a fresh approval for a later action or from an individual child task",
+        "Only the coordinator emits that opaque handle as one plain-text line",
+        "An empty session gets no handle",
         "Compacting the chat does not close Relay",
-        "Relay can continue only from a valid resume token that it issued earlier",
+        "Relay can continue only from a valid resume handle that it issued earlier for real unfinished work",
         "Feedback and Support",
         "Open a GitHub issue",
     ):
@@ -1244,6 +1795,11 @@ def validate() -> None:
     platforms = (SKILL_DIR / "references" / "platforms.md").read_text(encoding="utf-8")
     for phrase in (
         "Snapshot: 2026-07-13",
+        "When the user explicitly requests Relay in separate delegated tasks",
+        "Treat those tasks as child coordinators with independent local lifecycles and stated count budgets",
+        "A live child also requires a user-visible task with direct user-authored follow-up and close confirmation",
+        "use one-shot for background or invisible child tasks",
+        "never let the parent impersonate the user for child closure",
         "queueing a completed-subagent notification",
         "without proven auto-wake",
         "automatically use native completion waits or polling at short bounded intervals while active work remains",
@@ -1259,17 +1815,20 @@ def validate() -> None:
         "Apply each controlled-overlap result as a patch from its recorded base",
         "three-way reconcile against the updated integration state instead of overwriting the file",
         "verify the combined diff even when Git reports a clean merge",
+        "Only the coordinator of that task may emit a redeemable opaque handle",
+        "as one plain-text line rather than Markdown code, raw field/value state",
+        "never copy a child coordinator's token into the parent's lifecycle",
     ):
         if phrase not in platforms:
             fail(f"platforms.md is missing {phrase!r}")
 
-    live_session = (SKILL_DIR / "references" / "live-session.md").read_text(encoding="utf-8")
+    live_session = live_session_text
     for phrase in (
         "host `final`, `final_answer`, and `task_complete` markers",
         "do not authorize a Relay lifecycle transition",
         "Apply response mutations and replacement-token issuance first",
         "zero nonterminal handles satisfies the handle condition",
-        "monotonic ledger generation covers every token-carried mutable field",
+        "monotonic ledger generation that covers every token-carried mutable field",
         "Compare against newer surviving ledger state when available",
         "accept the explicit token as supplied portable state",
         "relative staleness cannot be independently proven",
@@ -1288,6 +1847,16 @@ def validate() -> None:
         "Poll again after processing only while active work remains",
         "Never use shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
         "Do not record a mode, option, scope, toggle, or persistent policy",
+        "An empty session, a request for the next task, or an `ACTIVE` label alone does not qualify",
+        "Only the coordinator may emit a redeemable opaque handle",
+        "Never expose semicolon/key-value fields, JSON, YAML, XML, a raw ledger, or a tool payload",
+        "If the runtime cannot issue and later redeem an opaque handle",
+        "Send ordinary leaf agents plain dispatch packets without Relay invocations or lifecycle state",
+        "explicitly requests Relay in a separate delegated task",
+        "label that handle a child coordinator",
+        "keep its ledger, token, and close lifecycle local to that task",
+        "Permit live scope only with that direct user channel; otherwise use one-shot",
+        "the parent does not copy their lifecycle artifacts into its own final or answer close confirmation for the user",
     ):
         if phrase not in live_session:
             fail(f"live-session.md is missing {phrase!r}")
@@ -1328,11 +1897,9 @@ def validate() -> None:
             fail(f"ambiguous invocation scope in {path.relative_to(ROOT)}")
         if path.suffix == ".md":
             for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", content):
-                if target.startswith("#") or "://" in target or target.startswith("mailto:"):
+                if "://" in target or target.startswith("mailto:"):
                     continue
-                local_target = target.split("#", 1)[0]
-                if local_target and not (path.parent / local_target).exists():
-                    fail(f"broken local link {target!r} in {path.relative_to(ROOT)}")
+                validate_local_markdown_link(path, target)
 
     cases = json.loads((ROOT / "evals" / "cases.json").read_text(encoding="utf-8"))
     if not isinstance(cases, list) or not cases:
@@ -1353,6 +1920,12 @@ def validate() -> None:
         },
         "bare_explicit_invocation_defaults_to_live_session": {
             "default_live_scope", "ACTIVE", "responsive_session", "later_close_confirmation_required"
+        },
+        "ambiguous_bare_invocation_opens_clean_live_session": {
+            "ambiguous_activation_intent", "no_current_objective", "default_live_scope",
+            "activation_acknowledgement", "live_session_opened_plain_language",
+            "request_next_task", "no_ledger_output", "no_session_token",
+            "no_raw_lifecycle_serialization", "no_markdown_code", "remain_ACTIVE",
         },
         "one_shot_blocked_handoff": {
             "one_shot_scope", "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
@@ -1453,7 +2026,31 @@ def validate() -> None:
             "exclusive_path_ownership", "expected_interfaces_and_invariants", "semantic_conflicts_remain",
             "integrate_one_stream_at_a_time", "validate_contracts", "worktrees_not_semantic_isolation"
         },
-        "sole_dispatcher": {"coordinator_only_dispatcher", "leaf_agents_do_not_spawn", "no_nested_orchestration"},
+        "sole_dispatcher": {"coordinator_only_dispatcher", "leaf_agents_do_not_spawn", "no_unrequested_nested_orchestration"},
+        "leaf_dispatch_does_not_activate_relay": {
+            "coordinator_owns_relay_lifecycle", "plain_leaf_dispatch_packet",
+            "no_leaf_relay_activation", "no_leaf_resume_token", "no_leaf_close_question",
+            "internal_leaf_handoff"
+        },
+        "explicit_child_coordinator_is_allowed": {
+            "explicit_nested_relay_authorized", "child_coordinator_role",
+            "parent_session_reference", "bounded_child_agent_budget",
+            "descendant_accounting_scope", "aggregate_descendant_reporting", "independent_child_lifecycle",
+            "live_child_requires_direct_user_channel", "background_child_uses_one_shot",
+            "parent_never_impersonates_user_for_close",
+            "parent_integration_authority", "clean_parent_synthesis",
+            "no_silent_additional_level"
+        },
+        "authorized_verification_is_not_reconfirmed": {
+            "inherit_user_repo_host_authority", "ordinary_in_scope_verification",
+            "no_extra_relay_confirmation", "no_repeated_authorization",
+            "host_repo_approval_still_authoritative"
+        },
+        "worker_payloads_are_synthesized": {
+            "internal_worker_payloads", "natural_language_synthesis", "no_raw_handoff",
+            "no_raw_tool_or_thread_payload", "outcome_evidence_paths_checks_risks_next_action",
+            "required_host_control_syntax_not_duplicated"
+        },
         "one_agent": {"requested_total_1", "responsive_session"},
         "fifteen_agents": {"requested_total_15", "no_skill_cap", "account_all"},
         "exact_total_ceiling": {"EXACT_2", "ask_for_count_delta", "no_third_handle"},
@@ -1528,6 +2125,43 @@ def validate() -> None:
         if not expected.issubset(actual):
             fail(f"eval case {case_id!r} is missing required expectations")
 
+    boundaries = json.loads((ROOT / "evals" / "boundaries.json").read_text(encoding="utf-8"))
+    if set(boundaries) != {
+        "authority_events", "host_capabilities", "session_records",
+        "delegations", "user_facing_outputs",
+    }:
+        fail("boundaries.json has invalid fields")
+    if not isinstance(boundaries["delegations"], list) or not boundaries["delegations"]:
+        fail("boundaries.json must contain delegation fixtures")
+    if not isinstance(boundaries["user_facing_outputs"], list) or not boundaries["user_facing_outputs"]:
+        fail("boundaries.json must contain user-facing output fixtures")
+    for dispatch in boundaries["delegations"]:
+        if not isinstance(dispatch, dict):
+            fail("delegation fixture must be an object")
+        validate_delegation_boundary(
+            dispatch,
+            boundaries["authority_events"],
+            boundaries["host_capabilities"],
+            boundaries["session_records"],
+        )
+    child_delegations = [
+        dispatch for dispatch in boundaries["delegations"]
+        if dispatch["role"] == "child_coordinator"
+    ]
+    if (
+        not child_delegations
+        or any(
+            dispatch["local_agent_budget"]["mode"] != "EXACT"
+            or dispatch["local_agent_budget"]["ceiling"] <= 0
+            for dispatch in child_delegations
+        )
+    ):
+        fail("child boundary fixtures must demonstrate positive bounded agent budgets")
+    for output in boundaries["user_facing_outputs"]:
+        if not isinstance(output, dict):
+            fail("user-facing output fixture must be an object")
+        validate_user_facing_boundary(output)
+
     transcripts = json.loads((ROOT / "evals" / "transcripts.json").read_text(encoding="utf-8"))
     if not isinstance(transcripts, list) or not transcripts:
         fail("transcripts.json must contain a non-empty list")
@@ -1578,7 +2212,7 @@ def validate() -> None:
             required_step = {"turn", "event", "detail", "expect"}
             allowed_step = required_step | {
                 "inputs", "writer_ids", "canary_id", "authorized_dirty_paths",
-                "reconciled_dirty_paths", "integrated_writer_ids",
+                "reconciled_dirty_paths", "integrated_writer_ids", "verified_overlap_group_ids",
             }
             if not required_step.issubset(step) or not set(step).issubset(allowed_step):
                 fail(f"invalid transcript step: {step!r}")
@@ -1785,12 +2419,9 @@ def validate() -> None:
                     fail(f"native poll did not stop to process a result: {transcript_id}")
 
             if "session_token" in tokens:
-                if event not in {"coordinator", "host_final"}:
-                    fail(f"session token must be coordinator-authored: {transcript_id}")
-                if not {"portable_resume_payload", "ledger_generation_in_token"}.issubset(tokens):
-                    fail(f"session token lacks portable resume payload: {transcript_id}")
-                if not capabilities["agent_handles_persist"] and "no_live_handle_at_yield" not in tokens:
-                    fail(f"token yield may strand a live handle: {transcript_id}")
+                validate_session_token_step(
+                    tokens, event, capabilities["agent_handles_persist"], transcript_id,
+                )
             if "explicit_skill_resume" in tokens:
                 required = {"portable_resume_payload"}
                 if event != "user" or state == "OFF" or not required.issubset(tokens):
@@ -2084,6 +2715,7 @@ def validate() -> None:
         "stop_during_shared_write_and_late_result",
         "persistence_fallback_continuous_bounded_waves",
         "bare_explicit_invocation_defaults_live_and_requires_later_close",
+        "ambiguous_bare_invocation_opens_clean_live_session",
         "new_work_cancels_pending_close",
         "close_confirmation_requires_separate_unstable_acceptance",
         "pending_close_confirmation_fallback",
@@ -2158,6 +2790,11 @@ def validate() -> None:
     }
     if not required_bare_live.issubset(bare_live_tokens):
         fail("bare explicit invocation transcript must stay live until later direct close confirmation")
+    ambiguous_live = next(
+        transcript for transcript in transcripts
+        if transcript["id"] == "ambiguous_bare_invocation_opens_clean_live_session"
+    )
+    validate_ambiguous_live_activation(ambiguous_live)
     for event in (
         "yield", "delivery_batch", "worker_result", "notification_wake", "wait_timeout",
         "host_final", "task_complete", "compaction",
@@ -2236,6 +2873,11 @@ def validate() -> None:
         "controllable_workers_closed",
         "report_late_write",
         "session_token",
+        "token_required_for_unfinished_state",
+        "runtime_issued_redeemable_handle",
+        "opaque_resume_handle",
+        "plain_text_resume_handle",
+        "no_raw_ledger_fields",
         "portable_resume_payload",
         "rehydrate",
         "explicit_skill_resume",
@@ -2301,6 +2943,12 @@ def validate() -> None:
         "zero_nonterminal_handles",
         "handle_continuity_vacuously_satisfied",
         "no_session_token",
+        "activation_acknowledgement",
+        "live_session_opened_plain_language",
+        "request_next_task",
+        "no_ledger_output",
+        "no_raw_lifecycle_serialization",
+        "no_markdown_code",
         "ledger_generation_increment",
         "handle_accounting_changed",
         "tree_stability_changed",

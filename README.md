@@ -39,7 +39,7 @@ The CLI detects supported agents and installs for the project in your current di
 
 ### Invoke It
 
-These examples use Codex's `$relay-orchestra` syntax; in other clients, use their explicit skill picker or command with the wording after that prefix. A bare explicit invocation defaults to a live session:
+These examples use Codex's `$relay-orchestra` syntax; in other clients, use their explicit skill picker or command with the wording after that prefix. A bare explicit invocation defaults to a live session. If the request is ambiguous or does not include a task yet, Relay plainly says that the live session is open and asks what to do next; it does not print an empty ledger or technical session state.
 
 ```text
 $relay-orchestra Start a live Relay Orchestra session. Run three read-only agents to review the
@@ -57,7 +57,7 @@ If native agents are unavailable, a live session offers sequential fallback inst
 > [!WARNING]
 > Delegated agents perform separate model work, whether concurrent or sequential, so tokens or credits can be consumed quickly. Start with the fewest agents that provide distinct value.
 
-With cross-turn background support, a successful live-session start can return this short receipt while work continues:
+When the host supports cross-turn background work and verified automatic wake, a successful live-session start can return this short receipt while work continues:
 
 ```text
 NOW: three reviewers active
@@ -81,6 +81,7 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 - **Keeps orchestration moving.** Relay distinguishes queued results from automatic wake and continues through dependent waves, integration, verification, and a completion candidate without requiring another user message.
 - **Accepts changes mid-run.** Add, revise, reprioritize, hold, or cancel work while agents are active.
 - **Uses native agents.** Relay Orchestra delegates through the host client instead of launching external agent CLIs.
+- **Keeps coordination explicit.** Ordinary delegated agents stay leaf workers. If you explicitly ask to use Relay in separate delegated tasks or chats, those tasks may become child coordinators with their own bounded scope and local lifecycle; Relay never creates another coordination level silently.
 - **Schedules to capacity.** Request any positive number of agents; Relay accounts for every slot and uses waves in live sessions when the client has fewer slots.
 - **Coordinates and verifies.** It assigns ownership, tracks dependencies, audits the outcome, and asks before closing the session.
 
@@ -147,7 +148,11 @@ If Relay cannot tell who made an existing change, it treats the file as yours an
 
 Worktrees separate checked-out files, so approved isolated agents may edit the same file at the same time. Relay records what each agent is trying to change, the shared starting revision, the combined expected behavior, and who will resolve conflicts. Agents may even touch the same lines when the parallel speedup is worth the merge cost. Without worktree isolation, same-file writers still run one after another.
 
-Relay integrates one finished and reviewed writer at a time. It applies later same-file patches against the already updated code instead of replacing the whole file. A clean Git merge is not enough: Relay reviews and tests the combined behavior from every writer.
+Relay settles one finished and reviewed writer at a time by integrating its patch—including any reconciliation into the shared base—or explicitly abandoning it. It applies later same-file patches against the already updated code instead of replacing the whole file. A clean Git merge is not enough: Relay reviews and tests the combined behavior of every patch it integrates and reports any patch it abandons.
+
+Explicit nested coordination is supported. A parent Relay session can delegate a separate task that also uses Relay when you ask for that structure. The child keeps its own ledger and agent budget, emits a resume token only when fallback continuity needs one, and asks a close question only in a live task that you can answer directly. Invisible or background child tasks use one-shot scope. The parent reports aggregate child activity, applies each requested agent limit to its stated scope, integrates the child result, and returns one clean synthesis instead of copying child handoffs or lifecycle artifacts.
+
+Relay follows the authority already established by your request, repository instructions, and the host. Relay itself does not invent another confirmation for ordinary in-scope local work or repeat the same grant. The host or repository may still require a fresh approval for a later action or from an individual child task. Relay never bypasses those controls.
 
 ## Compatibility and Limitations
 
@@ -161,7 +166,7 @@ Relay Orchestra follows the [Agent Skills specification](https://agentskills.io/
 | Result notifications | Delivery is checked separately from whether a notification starts a coordinator turn. |
 | Automatic coordinator wake | Enables native yield and resumption; otherwise Relay uses native short bounded completion waits and processes newer input between intervals. |
 | Lifecycle controls | Follow-up, interruption, and closure vary by client and version. |
-| Context compaction | Compacting the chat does not close Relay. If the client preserves session state, Relay continues normally. Otherwise, Relay can continue only from a valid resume token that it issued earlier. |
+| Context compaction | Compacting the chat does not close Relay. If the client preserves session state, Relay continues normally. Otherwise, Relay can continue only from a valid resume handle that it issued earlier for real unfinished work. Only the coordinator emits that opaque handle as one plain-text line—never Markdown code, raw ledger fields, JSON, or a worker handoff. An empty session gets no handle. |
 | Concurrency | The host sets practical limits; Relay Orchestra schedules within them. |
 | Worktrees | Planned by default for two or more concurrent writers; creation requires explicit approval. Approved worktrees support controlled same-file overlap; otherwise writers are serialized. |
 
@@ -178,6 +183,7 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 - [Installation, updates, paths, and security](INSTALL.md)
 - [Live-session control](skills/relay-orchestra/references/live-session.md)
 - [Coordination patterns](skills/relay-orchestra/references/patterns.md)
+- [Dispatch and handoff packets](skills/relay-orchestra/references/packets.md)
 - [Prompt examples](examples/prompts.md)
 - [Contributing](CONTRIBUTING.md)
 

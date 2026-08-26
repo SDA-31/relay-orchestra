@@ -49,6 +49,8 @@ Reject dependency cycles. Do not create a graph for a small cohesive task.
 
 Default to the shared tree for read-only agents and at most one active writer only when existing changes and new writes can be attributed safely. Before a shared writer starts, inspect repository status and treat every pre-existing or unattributed dirty path as user-owned until audited. Block overlapping ownership unless the user explicitly authorizes it; narrow the writer's paths or offer an isolated worktree. Recommend an approved worktree even for one writer when the tree is dirty, attribution is unreliable, independent builds are needed, or work is long-running.
 
+When shared-tree writing is selected, state in the user's language: `Working without worktree isolation. Agents share the current working tree, and file changes appear there immediately.`
+
 Recheck status while a shared writer is nonterminal and before auditing its result. If a new user-owned or unattributed change overlaps its owned paths, interrupt it when possible, mark the tree unstable, and freeze overlapping operations until reconciliation. A worktree writer can finish in isolation, but its overlapping integration stays blocked.
 
 ### Concurrent Writers
@@ -74,13 +76,14 @@ When switching an overlapping path from an isolated writer to a shared-tree writ
 Worktrees isolate checked-out files, not semantic, API, schema, external-state, or integration conflicts.
 
 1. Integrate exactly one isolated writer per operation after its terminal result and coordinator audit.
-2. Record its writer ID, re-inspect shared-tree status, and compare that writer's canonical owned paths with the currently protected dirty paths.
-3. Worktree approval alone never authorizes integration over dirty user paths. Block an overlapping stream, but allow an independent stream to integrate.
-4. A user authorization or coordinator reconciliation clears only its exact named dirty paths; all other overlaps remain protected. Ownership narrowing is valid only before isolated work has produced changes on an overlapping path.
-5. For a controlled-overlap group, preserve patches relative to the shared base. Apply the first stream, then three-way reconcile later patches against the updated integration state; never copy a later worktree's whole file over earlier work.
-6. Resolve small ordinary conflicts in the coordinator. Prefer the recorded context-rich resolver for non-trivial same-hunk or cross-contract conflicts, but keep integration coordinator-authored: audit the resolver's patch or instructions before applying them. Ask the user only for ambiguous or incompatible product intent.
-7. Treat a clean merge as insufficient evidence. Audit the combined diff, validate the combined interfaces and invariants, and test every participating workstream after the group is assembled.
-8. Validate recorded contracts and retain worktrees until integration or explicit abandonment. Remove task-created worktrees after verified integration when cleanup is authorized.
+2. Treat "reconciled into the shared base" as an integration operation, not a metadata-only settlement. It must name that one writer, apply its patch from the recorded base, preserve whole-file overwrite protection, pass dirty-path checks, and carry every controlled-overlap reconciliation invariant below.
+3. Record its writer ID, re-inspect shared-tree status, and compare that writer's canonical owned paths with the currently protected dirty paths.
+4. Worktree approval alone never authorizes integration over dirty user paths. Block an overlapping stream, but allow an independent stream to integrate.
+5. A user authorization or coordinator reconciliation clears only its exact named dirty paths; all other overlaps remain protected. Ownership narrowing is valid only before isolated work has produced changes on an overlapping path.
+6. For a controlled-overlap group, preserve patches relative to the shared base. Apply the first stream, then three-way reconcile later patches against the updated integration state; never copy a later worktree's whole file over earlier work.
+7. Resolve small ordinary conflicts in the coordinator. Prefer the recorded context-rich resolver for non-trivial same-hunk or cross-contract conflicts, but keep integration coordinator-authored: audit the resolver's patch or instructions before applying them. Ask the user only for ambiguous or incompatible product intent.
+8. Treat a clean merge as insufficient evidence. After every member is integrated or explicitly abandoned, audit the combined diff, validate the combined interfaces and invariants, test every integrated workstream, and report abandoned patches.
+9. Validate recorded contracts and retain worktrees until integration or explicit abandonment. Remove task-created worktrees after verified integration when cleanup is authorized.
 
 ## Synthesis
 
@@ -91,7 +94,7 @@ Normalize results into confirmed consensus, meaningful disagreement, verified ev
 - A fixed maximum agent count imposed by the skill
 - Silently reducing the requested total
 - Decorative agents without a lens, partition, or ownership
-- Nested subagent trees
+- Unrequested nested subagent trees, including any ordinary leaf that spawns agents or activates Relay. A separately delegated child coordinator is valid only when the user explicitly requested Relay for that task and every additional coordination level has its own explicit authorization.
 - Unrecorded or shared-tree writers sharing overlapping paths
 - Blindly overwriting an integrated file with a later worktree copy
 - Treating a branch in one checkout as isolation
