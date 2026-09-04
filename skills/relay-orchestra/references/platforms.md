@@ -6,7 +6,9 @@ Snapshot: 2026-07-13. Prefer runtime inspection because agent features and limit
 
 Relay Orchestra follows the open Agent Skills format: one `relay-orchestra` directory, a `SKILL.md` with name and description frontmatter, and optional references and product metadata.
 
-The specification defines neither a universal subagent API, a universal invocation syntax, nor a universal explicit-only switch. Relay Orchestra therefore applies a runtime capability gate and explicit scope. One-shot work is bounded to the current user message and its response; bare explicit invocation defaults to a live session. Optional Codex metadata adds platform-level explicit-only policy.
+The specification defines neither a universal subagent API, invocation syntax, nor persistent chat preference. Relay Orchestra therefore applies two layers: optional chat-scoped Auto plus separate current execution. A bare invocation with a bounded objective defaults to Lite one-shot; without an objective it enables idle Auto, explains it, and asks for the task. It does not open Full live. Future-use wording also enables Auto while a current objective routes normally. Explicit `full`, `live`, or `multi-turn` selects Full. Codex metadata permits prompt-matched reload so a later task can honor previously enabled Auto or continue active Full live; the description rejects use without explicit activation or that surviving chat context.
+
+Auto launches no agents and creates no lifecycle machinery while idle. It retains any user-stated filter, delegates only when materially distinct work exists, and otherwise keeps small linear work local. Auto routes only while execution is `OFF`; an active Full live session owns related deltas. Completed one-shots leave Auto enabled. Auto is not copied to new chats or child tasks. Natural-language `auto off` disables only the future preference, not active Full work. Compaction preserves Auto only when the host retained the preference and filter; no client-independent persistence is claimed.
 
 When the user explicitly requests Relay in separate delegated tasks, the parent may carry that activation through each client's explicit skill mechanism. Treat those tasks as child coordinators with independent local lifecycles and stated count budgets, not as ordinary leaves. A live child also requires a user-visible task with direct user-authored follow-up and close confirmation; use one-shot for background or invisible child tasks. Never infer another coordination level merely because a client supports nested agents, and never let the parent impersonate the user for child closure.
 
@@ -29,15 +31,15 @@ On 2026-07-13, the Codex app was observed queueing a completed-subagent notifica
 
 ## Invocation Scope
 
-Use the client's explicit skill mechanism. This phrase opens a bounded live session:
+Use the client's explicit skill mechanism. This phrase opens a full live session:
 
-    Start a Relay Orchestra session for this work.
+    Start a full live Relay Orchestra session for this work.
 
-This phrase applies Relay once and deactivates with the response:
+This bounded request defaults to Lite one-shot and deactivates with the response:
 
-    Use Relay Orchestra for this message only.
+    Use Relay Orchestra to run two reviewers and synthesize their findings.
 
-A bare explicit invocation defaults to live-session scope. If it is ambiguous or has no current objective, acknowledge the open live session in ordinary language and ask for the next task without exposing ledger state or emitting an empty-session token. Live sessions span related follow-ups and remain active after a completion candidate until a later direct close answer or explicit stop.
+A bare explicit invocation with a bounded objective defaults to Lite one-shot and does not enable Auto unless future-use intent is present. Without an objective, while execution is `OFF`, it enables Auto and asks for the next task without lifecycle artifacts. While Full live is `ACTIVE`, related requests and bare reinvocation preserve that session; Auto cannot open a competing run. Explicit live sessions remain active until a later direct close answer or explicit stop. Promote Lite to Full before unsafe dispatch, naming the reason and whether the run is Full one-shot or Full live.
 
 ## Resume Wrappers
 

@@ -111,12 +111,12 @@
     "final_state": "ACTIVE"
   },
   {
-    "id": "bare_explicit_invocation_defaults_live_and_requires_later_close",
+    "id": "explicit_full_live_invocation_requires_later_close",
     "scope": "live",
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "$relay-orchestra run one reviewer.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "user", "detail": "$relay-orchestra start a full live session and run one reviewer.", "expect": ["explicit_full_live_scope", "OFF_to_ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "Dispatch the reviewer and begin native short completion polling because notifications do not wake the coordinator.", "expect": ["dispatch", "shared_announcement", "responsive_session", "result_notifications", "notification_presence_not_wake_proof", "no_notification_auto_wake", "native_completion_polling", "short_bounded_poll_interval", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "active_work_and_next_condition_required", "no_user_or_manual_wake_dependency", "no_shell_sleep", "no_long_blind_block", "no_poll_without_active_work_or_next_condition", "ACTIVE"]},
       {"turn": 1, "event": "worker_result", "detail": "The reviewer completes during the interval, which ends for result processing and final audit.", "expect": ["result_available", "poll_cycle_stops", "newer_input_checked_before_result", "worker_result_delivered", "completion_criteria_candidate", "ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "Audit, present the completion candidate and residual risks, ask to close, and remain active.", "expect": ["final_audit", "completion_candidate", "residual_risk_synthesis", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "later_close_confirmation_required", "remain_ACTIVE"]},
@@ -127,15 +127,15 @@
     "final_state": "OFF"
   },
   {
-    "id": "ambiguous_bare_invocation_opens_clean_live_session",
-    "scope": "live",
+    "id": "bare_invocation_enables_auto_idle",
+    "scope": "auto_idle",
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": true, "result_notifications": true, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "$relay-orchestra I recommend using this in future to speed up investigations.", "expect": ["bare_explicit_invocation", "ambiguous_activation_intent", "no_current_objective", "default_live_scope", "OFF_to_ACTIVE"]},
-      {"turn": 1, "event": "coordinator", "detail": "State plainly that the live session is open and will remain active, then ask for the next task without exposing lifecycle state.", "expect": ["activation_acknowledgement", "live_session_opened_plain_language", "request_next_task", "zero_nonterminal_handles", "handle_continuity_vacuously_satisfied", "no_ledger_output", "no_session_token", "no_raw_lifecycle_serialization", "no_markdown_code", "remain_ACTIVE"]}
+      {"turn": 1, "event": "user", "detail": "$relay-orchestra", "expect": ["bare_explicit_invocation", "no_current_objective", "enable_auto_for_this_chat", "current_execution_OFF"]},
+      {"turn": 1, "event": "coordinator", "detail": "Enable Auto for this chat, explain its routing and boundaries in plain language, and ask for the task without opening a session.", "expect": ["complete_auto_notice", "auto_applies_current_chat", "bounded_tasks_start_lite", "risky_cross_turn_full_with_reason", "no_agents_while_idle", "delegated_agents_consume_usage", "no_new_permissions", "auto_off_or_natural_disable", "request_next_task", "no_ledger_output", "no_session_token", "no_close_question", "no_raw_lifecycle_serialization", "no_markdown_code"]}
     ],
-    "final_state": "ACTIVE"
+    "final_state": "OFF"
   },
   {
     "id": "new_work_cancels_pending_close",
@@ -183,7 +183,7 @@
     "capabilities": {"skill_instructions_persist": true, "ledger_persists": true, "agent_handles_persist": false, "result_notifications": false, "notification_auto_wake": false, "isolated_writer_checkouts": true},
     "initial_state": "OFF",
     "steps": [
-      {"turn": 1, "event": "user", "detail": "Explicitly activate Relay Orchestra for a read-only inspection.", "expect": ["default_live_scope", "OFF_to_ACTIVE"]},
+      {"turn": 1, "event": "user", "detail": "Explicitly start a Full live Relay Orchestra session for a read-only inspection.", "expect": ["explicit_full_live_scope", "OFF_to_ACTIVE"]},
       {"turn": 1, "event": "coordinator", "detail": "Subagents are unavailable; ask permission for sequential read-only fallback.", "expect": ["no_subagents", "fallback_authorization_question", "remain_ACTIVE"]},
       {"turn": 2, "event": "user", "detail": "Yes, perform the same inspection sequentially and read-only.", "expect": ["fallback_work_authorized", "non_close_answer", "no_closure_authorization", "remain_ACTIVE"]},
       {"turn": 2, "event": "coordinator", "detail": "Perform and audit the fallback, report a completion candidate, and end with the close question.", "expect": ["sequential_fallback", "final_audit", "completion_candidate", "ask_close", "close_question_ends_turn", "pending_close_confirmation", "close_question_revision_bound", "remain_ACTIVE", "no_same_turn_shutdown"]}

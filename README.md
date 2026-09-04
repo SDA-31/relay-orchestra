@@ -19,11 +19,11 @@
 
 ---
 
-Relay Orchestra is an explicit multi-agent orchestration skill for [Codex, Claude Code, Gemini CLI, and other Agent Skills clients](skills/relay-orchestra/references/platforms.md). It coordinates built-in subagents, gives each one a focused task, and combines their work into one checked result. You can use it once or keep a live multi-turn session open while you add new instructions.
+Relay Orchestra is an explicit multi-agent orchestration skill designed for [Codex, Claude Code, Gemini CLI, and other Agent Skills clients](skills/relay-orchestra/references/platforms.md); available capabilities vary by client and version. It coordinates built-in subagents, gives each one a focused task, and combines their work into one checked result. Bounded tasks use a compact lite one-shot loop; work with multiple writers, worktrees, changing requirements, uncertain capabilities, or cross-turn continuity uses the full contract. An optional chat-scoped Auto preference can apply that router to later suitable tasks without keeping a session open.
 
 Use it for market or competitor research, large codebase audits, module or multi-module implementation, migrations, and cross-cutting reviews. Clients without live parallel support fall back honestly to smaller batches, one-by-one work, or ready-to-send agent instructions.
 
-A live session stays active across related follow-ups, even after the objective appears complete. It enters shutdown only after a later direct answer to its current close question or an explicit stop command. An explicit one-shot invocation ends in the same response without a close question or cross-turn persistence.
+A full live session stays active across related follow-ups, even after the objective appears complete. It enters shutdown only after a later direct answer to its current close question or an explicit stop command. Lite is always one-shot: it ends in the same response without a close question, ledger, or cross-turn persistence.
 
 ## Quick Start
 
@@ -39,20 +39,36 @@ The CLI detects supported agents and installs for the project in your current di
 
 ### Invoke It
 
-These examples use Codex's `$relay-orchestra` syntax; in other clients, use their explicit skill picker or command with the wording after that prefix. A bare explicit invocation defaults to a live session. If the request is ambiguous or does not include a task yet, Relay plainly says that the live session is open and asks what to do next; it does not print an empty ledger or technical session state.
+These examples use Codex's `$relay-orchestra` syntax; in other clients, use their explicit skill picker or command with the wording after that prefix. A bare invocation with no task enables Auto for this chat, explains the routing and usage implications, and asks what you want to do. It does not open a live session or launch agents:
 
 ```text
-$relay-orchestra Start a live Relay Orchestra session. Run three read-only agents to review the
-current changes, then verify and synthesize their findings while I keep steering.
+$relay-orchestra
 ```
 
-For bounded work that must not persist:
+A bare invocation with a concrete bounded task defaults to lite one-shot and does not silently enable Auto:
 
 ```text
-$relay-orchestra For this message only, run two reviewers and synthesize once.
+$relay-orchestra Run three read-only agents to review the current changes, then verify and
+synthesize their findings once.
 ```
 
-If native agents are unavailable, a live session offers sequential fallback instead of applying it silently.
+Ask for full when work should persist or needs the heavier safety machinery:
+
+```text
+$relay-orchestra Start a full live session. Review the import flow while I keep steering.
+```
+
+Natural future-use wording also enables Auto. It may include a scope such as “reviews only, never implementation.” If the same message includes a current task, Relay runs that task normally and leaves Auto enabled afterward:
+
+```text
+$relay-orchestra Review the current diff once, and keep using Relay for suitable later tasks in this chat.
+```
+
+While Auto is idle, no agents, ledger, handles, polling, resume token, or close question exist. It delegates only when distinct workstreams, review lenses, or independent implementation and verification add material value; small linear tasks stay local. Say `auto off`—or ask naturally to stop using Relay for later tasks in this chat—to disable only the future preference. That does not stop an already active full live session unless you also ask to stop that session. Related requests always remain inside an active full live session instead of opening a competing Auto run. If native agents are unavailable, Relay offers sequential fallback instead of applying it silently.
+
+`Full` describes the safety rules; `live` describes how long the session stays open. A bounded task can use full safety and still finish once, without a close question. If it must wait for your approval, a later requirement, or safe hand-back of an uncontrolled writer, it becomes full live and stays open until that lifecycle is settled.
+
+Auto is local to the current chat. It does not transfer to a new chat, delegated child task, or unrelated session, grants no new permissions, and uses no resume token. Delegated agents perform separate model work and consume usage. In Codex, prompt-matched invocation must remain enabled so a later in-scope message can honor armed Auto or continue an active Full live run; the description still forbids activation without that surviving context. When a client preserves the chat preference and its scope across compaction or ordinary responses, Auto remains enabled; Relay does not claim persistence if the client discarded it. See [OpenAI's skill invocation policy](https://learn.chatgpt.com/docs/build-skills#optional-metadata).
 
 > [!WARNING]
 > Delegated agents perform separate model work, whether concurrent or sequential, so tokens or credits can be consumed quickly. Start with the fewest agents that provide distinct value.
@@ -78,12 +94,13 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 
 ## What It Does
 
-- **Keeps orchestration moving.** Relay distinguishes queued results from automatic wake and continues through dependent waves, integration, verification, and a completion candidate without requiring another user message.
-- **Accepts changes mid-run.** Add, revise, reprioritize, hold, or cancel work while agents are active.
+- **Stays light on bounded work.** Lite avoids speculative capability probes, persistent ledgers, repeated status chatter, and close handshakes.
+- **Keeps full orchestration moving.** Full distinguishes between a result being delivered and that result automatically waking the coordinator. It continues through dependent waves, integration, verification, and a proposed completed result without requiring another user message.
+- **Accepts changes mid-run.** In a full live session, add, revise, reprioritize, hold, or cancel work while agents are active.
 - **Uses native agents.** Relay Orchestra delegates through the host client instead of launching external agent CLIs.
 - **Keeps coordination explicit.** Ordinary delegated agents stay leaf workers. If you explicitly ask to use Relay in separate delegated tasks or chats, those tasks may become child coordinators with their own bounded scope and local lifecycle; Relay never creates another coordination level silently.
 - **Schedules to capacity.** Request any positive number of agents; Relay accounts for every slot and uses waves in live sessions when the client has fewer slots.
-- **Coordinates and verifies.** It assigns ownership, tracks dependencies, audits the outcome, and asks before closing the session.
+- **Coordinates and verifies.** It assigns ownership, tracks dependencies, audits the outcome, and asks before closing only when the selected full lifecycle requires it.
 
 ## How a Live Session Works
 
@@ -174,7 +191,7 @@ Without auto-wake, a live session automatically uses native completion waits or 
 
 A result, orchestration completion, redirect, stop, one-off pause or yield request, or real blocker ends the current polling cycle. Relay never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition.
 
-One-shot work repeats short native completion polls in its originating turn, treats an interval timeout as a scheduling tick, and deactivates after settling every controllable worker before its final response. A request to pause or yield until the user returns is an ordinary one-off instruction, not a mode, option, scope, toggle, or persistent policy.
+Lite one-shot work uses bounded native waits only while a necessary dependency wave remains active, processes newer user input first, and deactivates after settling every controllable worker before its final response. A healthy timeout may produce one compact progress update and another bounded wait, but never a polling state machine or a wait without active work. If Auto is enabled, the preference remains available for the next suitable task even though the run ended. A request to pause or yield until the user returns is an ordinary one-off instruction, not a mode, option, scope, toggle, or persistent policy.
 
 See the dated [platform capability notes](skills/relay-orchestra/references/platforms.md). Relay Orchestra is an explicitly scoped coordinator, not an always-on automation framework.
 
@@ -182,6 +199,7 @@ See the dated [platform capability notes](skills/relay-orchestra/references/plat
 
 - [Installation, updates, paths, and security](INSTALL.md)
 - [Live-session control](skills/relay-orchestra/references/live-session.md)
+- [Lite/full routing and portable client notes](skills/relay-orchestra/references/platforms.md)
 - [Coordination patterns](skills/relay-orchestra/references/patterns.md)
 - [Dispatch and handoff packets](skills/relay-orchestra/references/packets.md)
 - [Prompt examples](examples/prompts.md)

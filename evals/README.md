@@ -11,7 +11,9 @@
 - verify user-event priority;
 - assert scope, state transitions, continuity, bounded polling, and stop conditions after every step.
 
-A one-shot interval timeout is a scheduling tick. Keep polling in the same turn while healthy or authorized dependent work remains. Finish with terminal synthesis, worker settlement, and `OFF`. A blocked one-shot also finishes `OFF` in its only turn. A bare explicit invocation uses live scope and needs a later direct close answer. If it has no clear current objective, the coordinator must acknowledge activation plainly, request the next task, and expose neither an empty ledger nor a resume token.
+A full one-shot interval timeout is a scheduling tick. Keep polling in the same turn while healthy or authorized dependent work remains. Finish with terminal synthesis, worker settlement, and `OFF`. A blocked full one-shot also finishes `OFF` in its only turn. Lite uses bounded native waits only while a necessary wave remains active; a healthy timeout may produce compact progress and another wait without creating a polling state machine. A bare invocation without a current objective enables idle chat-scoped Auto, gives the complete notice, asks for the task, and launches no lifecycle machinery.
+
+`mode-transitions.json` isolates Auto from current execution, including active-Full precedence and scoped routing filters. The project validator checks each transition, state shape, required guarantees, and contradictory tokens. SkillForge fixtures ship under `skills/relay-orchestra/evals/`; Auto scenario assertions are exact regression contracts. Recorded baseline, GREEN, and blind A/B evidence lives under `evals/results/`.
 
 ## Delegation And Output Boundaries
 

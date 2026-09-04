@@ -1,6 +1,6 @@
 interface:
   display_name: "Relay Orchestra"
-  short_description: "Coordinate parallel agents safely"
-  default_prompt: "Start a live $relay-orchestra session for this objective with parallel native agents where supported, keep it active across related follow-ups, disclose capability limits and fallbacks, and remain active until I directly confirm closure in a later message."
+  short_description: "Coordinate parallel agents, worktrees, and reviewers safely"
+  default_prompt: "Enable $relay-orchestra Auto for suitable work later in this chat. Explain how it routes bounded and risky work, then ask what I want to do."
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

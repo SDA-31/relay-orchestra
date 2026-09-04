@@ -2,6 +2,16 @@
 
 Use this reference when the user changes requirements while agents are active, while close confirmation is pending, when capacity must be reallocated, or when several worker and user events arrive close together.
 
+Auto is a separate chat preference, never part of this ledger or lifecycle. Full live takes precedence: while `ACTIVE`, route related deltas and bare reinvocation into this session instead of starting an Auto run. Starting or closing Full live does not change Auto. An `auto off` request disables only future automatic routing; keep the current run active unless the same message clearly stops it. Never put Auto or its filter in a resume token, transfer it to a child coordinator, or infer it in another chat.
+
+## Full One-Shot Versus Full Live
+
+Full one-shot imports the capability, ownership, writer, integration, cancellation, settlement, and verification safeguards in this reference without opening an `ACTIVE` live session, persistent ledger, or close-confirmation handshake. Use it only when the promoted bounded objective can still finish in the originating response. After terminal work is audited and every controllable worker is settled, report completion or an honest blocked/partial result and finish `OFF` without a close question.
+
+If a required approval, user decision, background dependency, material mid-run requirement change, or other unresolved lifecycle condition needs another turn, use full live instead. Before writer dispatch, a missing approval or decision keeps unsafe work blocked; do not create a worktree or writer first. If control of a dispatched writer unexpectedly becomes unavailable, enter the full live `STOPPING` containment path immediately: freeze new dispatch and repository operations, preserve exact handle accounting and continuity, audit delivered or partial writes, disclose the unstable-tree risk, and remain `STOPPING` until the writer is terminal or the user later accepts the separate hand-back risk. Never report that a bounded run reached `OFF` safely while an uncontrolled possible writer remains.
+
+The close-confirmation rules below apply only to full live. They do not add a close question to full one-shot.
+
 ## Event Loop
 
 1. Read the newest user message before processing older worker events.

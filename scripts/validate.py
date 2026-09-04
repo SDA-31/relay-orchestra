@@ -376,8 +376,18 @@ def validate_user_facing_boundary(output: dict[str, object]) -> None:
         r"\btoken\b[^\n]{0,48}\b(?:resume|session|continuation)\b",
         scan_text,
     )
+    opaque_handle_candidates = set(re.findall(
+        r"(?<![A-Za-z0-9._~-])rly\d+_[A-Za-z0-9._~-]{20,508}(?![A-Za-z0-9._~-])",
+        scan_text,
+    ))
     exposes_raw_lifecycle_serialization = bool(
         re.search(r"(?i)\brelay-v\d+\s*:", scan_text)
+        or re.search(
+            r"(?i)(?<![\w-])(?:state|execution|auto|s|rev(?:ision)?|count|used|"
+            r"handles|tree|close)\s*=\s*(?:ACTIVE|STOPPING|OFF|ENABLED|DISABLED|"
+            r"OPEN|CLOSED|stable|unstable|none|\d+|\[[^\]\n]*\])",
+            scan_text,
+        )
         or re.search(
             r"(?is)(?<![\w-])(?:s|rev|count|used|handles|tree|close)\s*="
             r"[^;\n`]*(?:;|\n)\s*"
@@ -461,10 +471,14 @@ def validate_user_facing_boundary(output: dict[str, object]) -> None:
             or not all(reason in allowed_unfinished_state for reason in token["unfinished_state"])
             or len(set(token["unfinished_state"])) != len(token["unfinished_state"])
             or not isinstance(token["rendered"], str)
-            or not re.fullmatch(r"[A-Za-z0-9._~-]{24,512}", token["rendered"])
+            or not re.fullmatch(r"rly\d+_[A-Za-z0-9._~-]{20,508}", token["rendered"])
             or token["session_ref"] != task_session_ref
         ):
             fail("resume token is not an opaque coordinator-only fallback for unfinished state")
+    if opaque_handle_candidates and (
+        token is None or opaque_handle_candidates != {token["rendered"]}
+    ):
+        fail("user-facing text exposes an untracked opaque resume handle")
 
     sections = output["synthesis_sections"]
     minimum = {"outcome", "evidence", "changed_paths", "checks", "risks", "next_action"}
@@ -547,6 +561,349 @@ def frontmatter(text: str) -> dict[str, str]:
         key, value = line.split(":", 1)
         values[key.strip()] = value.strip()
     return values
+
+
+def validate_mode_transitions(path: Path | None = None) -> None:
+    """Validate Auto preference and current-execution transitions independently."""
+    source = path or ROOT / "evals" / "mode-transitions.json"
+    scenarios = json.loads(source.read_text(encoding="utf-8"))
+    required = {
+        "bare_invocation_enables_auto_idle": {
+            "bare_explicit_invocation", "no_current_objective", "enable_auto_for_this_chat",
+            "no_current_run", "complete_auto_notice", "bounded_tasks_start_lite",
+            "risky_or_cross_turn_may_use_full_with_reason", "no_agents_while_idle",
+            "delegated_agents_consume_usage", "no_new_permissions",
+            "natural_language_or_auto_off_disables", "request_task",
+            "no_ledger_or_resume_token_or_close_question",
+        },
+        "future_use_signal_enables_auto_idle": {
+            "natural_language_future_use_signal", "no_current_objective",
+            "enable_auto_for_this_chat", "no_current_run", "complete_auto_notice",
+            "request_task", "no_agents_while_idle", "no_active_lifecycle",
+            "no_raw_user_facing_state",
+        },
+        "bounded_task_with_future_use_runs_lite_and_keeps_auto": {
+            "concrete_bounded_objective", "future_use_signal", "enable_auto_for_this_chat",
+            "lite_one_shot", "bounded_waits_only_while_wave_active",
+            "healthy_timeout_may_repeat_wait", "no_persistent_ledger",
+            "artifact_verification", "compact_auto_remains_notice", "no_close_question", "OFF",
+        },
+        "later_bounded_task_under_auto_is_fresh_lite": {
+            "suitable_task_under_auto", "fresh_run", "do_not_resurrect_previous_lite",
+            "lite_one_shot", "bounded_waits_only_while_wave_active",
+            "healthy_timeout_may_repeat_wait", "no_speculative_probes",
+            "no_persistent_ledger", "artifact_verification",
+            "compact_auto_remains_notice", "no_close_question", "OFF",
+        },
+        "bare_bounded_task_does_not_enable_auto": {
+            "concrete_bounded_objective", "no_future_use_signal", "lite_one_shot",
+            "auto_unchanged", "bounded_waits_only_while_wave_active",
+            "healthy_timeout_may_repeat_wait", "no_speculative_probes",
+            "no_persistent_ledger", "artifact_verification", "no_close_question", "OFF",
+        },
+        "auto_promotes_to_full_one_shot": {
+            "suitable_task_under_auto", "multiple_writers", "promote_before_dispatch",
+            "full_one_shot", "promotion_notice", "concrete_reason_multiple_writers",
+            "notice_says_full_one_shot", "worktrees_preapproved", "writer_map_recorded",
+            "integration_verified", "compact_auto_remains_notice", "no_close_question", "OFF",
+        },
+        "auto_promotes_to_full_live": {
+            "suitable_task_under_auto", "missing_required_approval",
+            "genuine_cross_turn_lifecycle", "full_live", "promotion_notice",
+            "concrete_reason_required_approval_wait", "notice_says_full_live",
+            "request_approval", "no_unsafe_writer_dispatch", "remain_ACTIVE",
+        },
+        "auto_off_does_not_stop_active_full_live": {
+            "natural_language_auto_off", "disable_future_preference_only",
+            "current_live_session_not_targeted_for_stop", "auto_disabled_plain_language",
+            "preserve_current_full_live_run", "preserve_handles_and_ledger", "remain_ACTIVE",
+        },
+        "active_full_live_precedes_auto": {
+            "active_full_live_precedence", "related_delta", "no_fresh_auto_run",
+            "preserve_session_accounting", "route_into_existing_full_live",
+            "preserve_handles_and_ledger", "remain_ACTIVE",
+        },
+        "scoped_auto_filters_later_tasks": {
+            "natural_language_future_use_signal", "enable_auto_for_this_chat",
+            "record_user_scoped_filter", "reviews_only", "exclude_implementation",
+            "task_outside_auto_scope", "keep_work_local", "no_relay_dispatch",
+            "current_execution_OFF",
+        },
+        "lost_writer_control_enters_stopping": {
+            "unexpected_writer_control_loss", "promote_to_full_live", "enter_STOPPING",
+            "promotion_notice", "concrete_reason_uncontrolled_writer", "notice_says_full_live",
+            "freeze_dispatch", "freeze_repository_operations",
+            "preserve_exact_accounting_and_continuity", "risk_disclosed", "no_false_OFF",
+        },
+    }
+    expected_shapes = {
+        "bare_invocation_enables_auto_idle": (
+            ["route", "reply"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "future_use_signal_enables_auto_idle": (
+            ["route", "reply"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "bounded_task_with_future_use_runs_lite_and_keeps_auto": (
+            ["route", "dispatch", "final"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "later_bounded_task_under_auto_is_fresh_lite": (
+            ["route", "dispatch", "final"], {"auto": "ENABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "bare_bounded_task_does_not_enable_auto": (
+            ["route", "dispatch", "final"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "DISABLED", "execution": "OFF"},
+        ),
+        "auto_promotes_to_full_one_shot": (
+            ["route", "dispatch", "final"], {"auto": "ENABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "auto_promotes_to_full_live": (
+            ["route", "coordinator"], {"auto": "ENABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "ACTIVE"},
+        ),
+        "auto_off_does_not_stop_active_full_live": (
+            ["route", "coordinator"], {"auto": "ENABLED", "execution": "ACTIVE"},
+            {"auto": "DISABLED", "execution": "ACTIVE"},
+        ),
+        "active_full_live_precedes_auto": (
+            ["route", "coordinator"], {"auto": "ENABLED", "execution": "ACTIVE"},
+            {"auto": "ENABLED", "execution": "ACTIVE"},
+        ),
+        "scoped_auto_filters_later_tasks": (
+            ["route", "later_task"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "ENABLED", "execution": "OFF"},
+        ),
+        "lost_writer_control_enters_stopping": (
+            ["route", "safety", "handoff"], {"auto": "DISABLED", "execution": "OFF"},
+            {"auto": "DISABLED", "execution": "STOPPING"},
+        ),
+    }
+    expected_prompts = {
+        "bare_invocation_enables_auto_idle": "$relay-orchestra",
+        "future_use_signal_enables_auto_idle": "$relay-orchestra Use this for suitable work from now on in this chat. I do not have a concrete task yet.",
+        "bounded_task_with_future_use_runs_lite_and_keeps_auto": "$relay-orchestra Review the current diff with two read-only reviewers, and keep using Relay for later tasks in this chat.",
+        "later_bounded_task_under_auto_is_fresh_lite": "Now compare these two bounded API documents and synthesize once.",
+        "bare_bounded_task_does_not_enable_auto": "$relay-orchestra run two read-only reviewers and synthesize once.",
+        "auto_promotes_to_full_one_shot": "Use two writers in already-approved isolated worktrees, integrate them, and synthesize once.",
+        "auto_promotes_to_full_live": "Use two overlapping writers; worktree approval is still required from me on a later turn.",
+        "auto_off_does_not_stop_active_full_live": "Stop using Relay automatically for later tasks, but keep this current live review running.",
+        "active_full_live_precedes_auto": "With Auto enabled and Full live ACTIVE, add a test reviewer to this migration.",
+        "scoped_auto_filters_later_tasks": "$relay-orchestra Use Auto for code reviews only, never implementation; then later ask for a small implementation.",
+        "lost_writer_control_enters_stopping": "$relay-orchestra run one bounded writer, then cancellation loses control of its handle.",
+    }
+    forbidden = {
+        "bare_invocation_enables_auto_idle": {"OFF_to_ACTIVE", "ACTIVE", "remain_ACTIVE", "dispatch", "session_token", "ask_close"},
+        "future_use_signal_enables_auto_idle": {"OFF_to_ACTIVE", "ACTIVE", "remain_ACTIVE", "dispatch", "session_token", "ask_close"},
+        "bounded_task_with_future_use_runs_lite_and_keeps_auto": {"OFF_to_ACTIVE", "remain_ACTIVE", "ask_close"},
+        "later_bounded_task_under_auto_is_fresh_lite": {"OFF_to_ACTIVE", "remain_ACTIVE", "ask_close", "resurrect_previous_lite"},
+        "bare_bounded_task_does_not_enable_auto": {"enable_auto_for_this_chat", "remain_ACTIVE", "ask_close"},
+        "auto_promotes_to_full_one_shot": {"OFF_to_ACTIVE", "remain_ACTIVE", "ask_close"},
+        "auto_promotes_to_full_live": {"OFF", "STOPPING", "writer_dispatch_before_approval"},
+        "auto_off_does_not_stop_active_full_live": {"OFF", "STOPPING", "stop_current_full_live"},
+        "active_full_live_precedes_auto": {"fresh_run", "lite_one_shot", "new_session", "OFF"},
+        "scoped_auto_filters_later_tasks": {"relay_dispatch", "writer_dispatch", "ignore_user_scoped_filter", "OFF_to_ACTIVE"},
+        "lost_writer_control_enters_stopping": {"OFF", "remain_ACTIVE", "continue_repository_operations"},
+    }
+    if not isinstance(scenarios, list) or len(scenarios) != len(required):
+        fail("mode transitions must contain the required Auto and execution scenarios")
+    seen: set[str] = set()
+    for scenario in scenarios:
+        if set(scenario) != {"id", "prompt", "initial", "steps", "final"}:
+            fail(f"invalid mode-transition scenario: {scenario!r}")
+        scenario_id = scenario["id"]
+        if scenario_id in seen or scenario_id not in required:
+            fail(f"unexpected or duplicate mode transition: {scenario_id!r}")
+        seen.add(scenario_id)
+        if scenario["prompt"] != expected_prompts[scenario_id]:
+            fail(f"mode transition prompt no longer proves its route: {scenario_id}")
+        expected_events, expected_initial, expected_final = expected_shapes[scenario_id]
+        if scenario["initial"] != expected_initial or scenario["final"] != expected_final:
+            fail(f"invalid mode-transition preference/execution state: {scenario_id}")
+        if not isinstance(scenario["steps"], list) or not scenario["steps"]:
+            fail(f"mode transition lacks steps: {scenario_id}")
+        tokens: set[str] = set()
+        actual_events: list[str] = []
+        for step in scenario["steps"]:
+            if set(step) != {"event", "expect"} or not step["event"]:
+                fail(f"invalid mode-transition step: {scenario_id}")
+            if not isinstance(step["expect"], list) or not all(isinstance(token, str) and token for token in step["expect"]):
+                fail(f"invalid mode-transition expectations: {scenario_id}")
+            actual_events.append(step["event"])
+            tokens.update(step["expect"])
+        if actual_events != expected_events:
+            fail(f"mode transition has invalid event order: {scenario_id}")
+        if not required[scenario_id].issubset(tokens):
+            fail(f"mode transition lacks required guarantees: {scenario_id}")
+        if forbidden[scenario_id].intersection(tokens):
+            fail(f"mode transition contains contradictory guarantees: {scenario_id}")
+    if seen != set(required):
+        fail("missing required mode-transition scenario")
+
+
+def validate_skill_local_evals(eval_dir: Path | None = None) -> None:
+    """Keep shipped SkillForge trigger and scenario fixtures executable and non-empty."""
+    eval_dir = eval_dir or SKILL_DIR / "evals"
+    triggers = json.loads((eval_dir / "triggers.json").read_text(encoding="utf-8"))
+    if set(triggers) != {"positive", "near_miss", "holdout"}:
+        fail("skill-local triggers must contain positive, near_miss, and holdout")
+    for key in ("positive", "near_miss", "holdout"):
+        values = triggers[key]
+        if not isinstance(values, list) or not values or not all(isinstance(value, str) and value.strip() for value in values):
+            fail(f"skill-local trigger set is empty or invalid: {key}")
+
+    scenario_dir = eval_dir / "scenarios"
+    required_names = {
+        "01-lite-read-only.md", "02-lite-writer-reviewers.md",
+        "03-promote-unsafe-writers.md", "04-promote-lifecycle-capabilities.md",
+        "05-lite-cancellation.md", "06-adversarial-reviewer.md",
+        "07-repeated-ab.md", "08-lite-requirement-change.md",
+        "09-bare-enables-auto.md", "10-bounded-future-use.md",
+        "11-later-task-under-auto.md", "12-auto-off-live.md",
+        "13-active-full-precedence.md", "14-scoped-auto.md",
+    }
+    expected_runs = {
+        "01-lite-read-only.md": 3,
+        "02-lite-writer-reviewers.md": 3,
+        "03-promote-unsafe-writers.md": 3,
+        "04-promote-lifecycle-capabilities.md": 3,
+        "05-lite-cancellation.md": 1,
+        "06-adversarial-reviewer.md": 1,
+        "07-repeated-ab.md": 3,
+        "08-lite-requirement-change.md": 3,
+        "09-bare-enables-auto.md": 3,
+        "10-bounded-future-use.md": 3,
+        "11-later-task-under-auto.md": 3,
+        "12-auto-off-live.md": 3,
+        "13-active-full-precedence.md": 3,
+        "14-scoped-auto.md": 3,
+    }
+    expected_auto_assertions = {
+        "09-bare-enables-auto.md": {
+            "Enable Auto only for the current chat and keep current execution idle.",
+            "Launch no agents and create no ledger, handle, polling loop, resume token, close question, or active lifecycle.",
+            "Explain Lite/Full routing, idle behavior, delegated-agent usage, unchanged permissions, and natural-language or auto off disablement.",
+            "Ask for the task in plain language without raw JSON, state, or lifecycle tokens.",
+        },
+        "10-bounded-future-use.md": {
+            "Enable Auto for this chat separately from routing the current bounded objective.",
+            "Run the current review as Lite one-shot and finish it without a close question or persistent ledger.",
+            "After verification, state compactly that Auto remains enabled for this chat.",
+            "Do not transfer Auto to delegated tasks, child chats, or unrelated sessions.",
+        },
+        "11-later-task-under-auto.md": {
+            "Start a fresh Lite one-shot run without resurrecting prior agents, handles, evidence, or lifecycle state.",
+            "Apply the ordinary safety router and promote only for a concrete current reason.",
+            "End the bounded run and leave Auto enabled for the next suitable task.",
+            "Keep the completion receipt compact and free of raw preference or lifecycle serialization.",
+        },
+        "12-auto-off-live.md": {
+            "Disable only the chat-scoped Auto preference.",
+            "Keep the current Full live lifecycle, handles, ledger, and work intact.",
+            "Stop the live session only if the user separately and clearly targets that session.",
+            "Acknowledge the preference change in plain language without raw state.",
+        },
+        "13-active-full-precedence.md": {
+            "Route the related request into the existing Full live session; do not start a fresh Auto run.",
+            "Preserve its handles, ledger, ownership, and agent accounting.",
+            "A bare reinvocation while ACTIVE also preserves that Full live session.",
+            "Auto remains a separate preference for after the live session closes.",
+        },
+        "14-scoped-auto.md": {
+            "Record the user-stated reviews-only filter as part of the chat preference.",
+            "Treat the later implementation as outside Auto scope and do not dispatch Relay agents for it.",
+            "Keep small linear work local even when Auto is enabled.",
+            "Preserve the filter across compaction only when the host retained ordinary chat context; never serialize it into a token.",
+        },
+    }
+    paths = {path.name: path for path in scenario_dir.glob("*.md")}
+    if set(paths) != required_names:
+        fail("skill-local scenarios must contain the required fourteen fixtures")
+    for name, path in paths.items():
+        content = path.read_text(encoding="utf-8")
+        match = re.match(r"\A---\n(.*?)\n---\n", content, re.DOTALL)
+        if not match:
+            fail(f"skill-local scenario lacks frontmatter: {name}")
+        header = match.group(1)
+        if not re.search(r'^task:\s*".+"$', header, re.MULTILINE):
+            fail(f"skill-local scenario lacks task: {name}")
+        if not re.search(r'^baseline_failure:\s*".+"$', header, re.MULTILINE):
+            fail(f"skill-local scenario lacks baseline_failure: {name}")
+        runs = re.search(r"^runs:\s*(\d+)$", header, re.MULTILINE)
+        if not runs or int(runs.group(1)) != expected_runs[name]:
+            fail(f"skill-local scenario has invalid runs: {name}")
+        assertions = re.findall(r'^  - "(.+)"$', header, re.MULTILINE)
+        if len(assertions) < 3:
+            fail(f"skill-local scenario needs at least three assertions: {name}")
+        if name in expected_auto_assertions and set(assertions) != expected_auto_assertions[name]:
+            fail(f"skill-local Auto scenario assertions changed or contradict the contract: {name}")
+
+
+def validate_behavior_result(path: Path | None = None) -> None:
+    """Keep the recorded Auto baseline/GREEN/blind-A-B evidence auditable."""
+    source = path or ROOT / "evals" / "results" / "auto-router-2026-09-04.json"
+    result = json.loads(source.read_text(encoding="utf-8"))
+    required_top = {
+        "date", "baseline_runner", "green_runner", "blind_judge", "scenarios",
+        "blind_ab_gate", "post_fix_behavioral_gate", "codex_host_smoke",
+        "mechanical_evidence_after_fixes", "adversarial_cycles", "notes",
+    }
+    if set(result) != required_top or result["blind_ab_gate"] != "PASS":
+        fail("Auto behavioral result has an invalid shape or failed A/B gate")
+    expected_scenarios = {
+        "bare_invocation", "future_use_without_task", "bounded_review_only",
+        "bounded_review_plus_future_use",
+    }
+    if set(result["scenarios"]) != expected_scenarios:
+        fail("Auto behavioral result is missing a baseline/GREEN scenario")
+    for name, scenario in result["scenarios"].items():
+        if set(scenario) != {"baseline", "green", "preferred"} or scenario["preferred"] != "green":
+            fail(f"Auto behavioral result does not prefer GREEN: {name}")
+    post_fix = result["post_fix_behavioral_gate"]
+    expected_cases = {
+        "later_two_lens_review_routes_lite", "small_linear_task_stays_local",
+        "active_full_live_precedes_auto", "reviews_only_scope_excludes_implementation",
+        "healthy_lite_timeout_repeats_bounded_wait",
+    }
+    if (
+        set(post_fix) != {"runner", "result", "cases"}
+        or post_fix["result"] != "PASS"
+        or set(post_fix["cases"]) != expected_cases
+        or set(post_fix["cases"].values()) != {"PASS"}
+    ):
+        fail("post-fix Auto behavioral gate is incomplete")
+    host_smoke = result["codex_host_smoke"]
+    if (
+        set(host_smoke) != {"runner", "result", "steps"}
+        or host_smoke["result"] != "PASS"
+        or not isinstance(host_smoke["steps"], list)
+        or len(host_smoke["steps"]) != 4
+        or not all(isinstance(step, str) and step for step in host_smoke["steps"])
+    ):
+        fail("Codex host smoke evidence is incomplete")
+    expected_mechanical = {
+        "project_validator": "PASS",
+        "unit_tests": "140 passed",
+        "skillforge_validator": "PASS",
+        "skillforge_static_evals": "30/30 passed",
+        "docs_safety": "PASS",
+        "git_diff_check": "PASS",
+    }
+    if result["mechanical_evidence_after_fixes"] != expected_mechanical:
+        fail("post-fix mechanical evidence is incomplete")
+    cycles = result["adversarial_cycles"]
+    if (
+        not isinstance(cycles, list)
+        or len(cycles) != 3
+        or [cycle.get("cycle") for cycle in cycles] != [1, 2, 3]
+        or any(set(cycle) != {"cycle", "result", "resolved"} for cycle in cycles)
+        or [cycle["result"] for cycle in cycles[:2]] != ["FIXES_REQUIRED", "FIXES_REQUIRED"]
+        or cycles[2]["result"] != "PASS_NO_BLOCKERS"
+    ):
+        fail("final adversarial release gate has not passed")
 
 
 def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str]) -> None:
@@ -698,12 +1055,10 @@ def validate_one_shot(transcript: dict[str, object], expectation_tokens: set[str
             if next_step["event"] != "coordinator" or not dependent_required.issubset(next_step["expect"]):
                 fail(f"one-shot did not dispatch and poll authorized dependent work: {transcript_id}")
 
-    if len(poll_indexes) < 2:
-        fail(f"one-shot completion must use repeated bounded polling: {transcript_id}")
+    if not poll_indexes:
+        fail(f"one-shot completion must wait for active work: {transcript_id}")
     if disclosure_count != 1:
         fail(f"one-shot polling must disclose its responsiveness cost once: {transcript_id}")
-    if not any(step["event"] == "wait_timeout" for step in steps):
-        fail(f"one-shot completion lacks interval-timeout coverage: {transcript_id}")
 
 
 def writer_state_before_step(
@@ -1526,42 +1881,44 @@ def validate_dirty_path_flow(transcript: dict[str, object]) -> None:
                 fail(f"isolated work integrated over protected dirty user paths: {transcript_id}")
 
 
-def validate_ambiguous_live_activation(transcript: dict[str, object]) -> None:
-    """Keep a bare ambiguous activation visible without leaking empty lifecycle state."""
+def validate_auto_idle_activation(transcript: dict[str, object]) -> None:
+    """Keep bare activation idle while arming a complete chat-scoped Auto preference."""
     if (
-        transcript.get("scope") != "live"
+        transcript.get("scope") != "auto_idle"
         or transcript.get("initial_state") != "OFF"
-        or transcript.get("final_state") != "ACTIVE"
+        or transcript.get("final_state") != "OFF"
         or not isinstance(transcript.get("steps"), list)
         or len(transcript["steps"]) != 2
     ):
-        fail("ambiguous bare invocation must open visibly without empty lifecycle artifacts")
-    ambiguous_user, ambiguous_reply = transcript["steps"]
-    user_tokens = set(ambiguous_user.get("expect", []))
-    reply_tokens = set(ambiguous_reply.get("expect", []))
+        fail("bare invocation must enable idle Auto without session lifecycle artifacts")
+    auto_user, auto_reply = transcript["steps"]
+    user_tokens = set(auto_user.get("expect", []))
+    reply_tokens = set(auto_reply.get("expect", []))
     required_user = {
-        "bare_explicit_invocation", "ambiguous_activation_intent",
-        "no_current_objective", "default_live_scope", "OFF_to_ACTIVE",
+        "bare_explicit_invocation", "no_current_objective",
+        "enable_auto_for_this_chat", "current_execution_OFF",
     }
     required_reply = {
-        "activation_acknowledgement", "live_session_opened_plain_language",
-        "request_next_task", "zero_nonterminal_handles",
-        "handle_continuity_vacuously_satisfied", "no_ledger_output",
-        "no_session_token", "no_raw_lifecycle_serialization",
-        "no_markdown_code", "remain_ACTIVE",
+        "complete_auto_notice", "auto_applies_current_chat", "bounded_tasks_start_lite",
+        "risky_cross_turn_full_with_reason", "no_agents_while_idle",
+        "delegated_agents_consume_usage", "no_new_permissions",
+        "auto_off_or_natural_disable", "request_next_task", "no_ledger_output",
+        "no_session_token", "no_close_question", "no_raw_lifecycle_serialization",
+        "no_markdown_code",
     }
     forbidden_reply = {
         "session_token", "portable_resume_payload", "ledger_generation_in_token",
         "dispatch", "writer_dispatch", "ask_close", "completion_candidate",
+        "OFF_to_ACTIVE", "ACTIVE", "remain_ACTIVE", "default_live_scope",
     }
     if (
-        ambiguous_user.get("event") != "user"
-        or ambiguous_reply.get("event") != "coordinator"
+        auto_user.get("event") != "user"
+        or auto_reply.get("event") != "coordinator"
         or not required_user.issubset(user_tokens)
         or not required_reply.issubset(reply_tokens)
         or forbidden_reply.intersection(reply_tokens)
     ):
-        fail("ambiguous bare invocation must open visibly without empty lifecycle artifacts")
+        fail("bare invocation must enable idle Auto without session lifecycle artifacts")
 
 
 def validate_session_token_step(
@@ -1591,6 +1948,9 @@ def validate_session_token_step(
 
 def validate() -> None:
     text = SKILL.read_text(encoding="utf-8")
+    validate_mode_transitions()
+    validate_skill_local_evals()
+    validate_behavior_result()
     metadata = frontmatter(text)
     if set(metadata) != {"name", "description", "license"}:
         fail("frontmatter must contain only name, description, and license")
@@ -1601,12 +1961,11 @@ def validate() -> None:
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", metadata["name"]):
         fail("skill name must use lowercase kebab-case")
     for phrase in (
-        "EXPLICIT-ONLY",
-        "parallel native subagents for large coding, research, audit, migration, and cross-module tasks",
-        "Use when the user explicitly names or invokes Relay Orchestra, and only then",
-        "one-shot scope that deactivates in the same response without a close question",
-        "run-scoped live session (the bare explicit default)",
-        "later direct explicit close confirmation",
+        "Use when explicitly invoking Relay Orchestra",
+        "while Auto is enabled",
+        "during its active Full live run in this chat",
+        "Ignore quoted or hypothetical mentions",
+        "ordinary single-agent work without Auto",
     ):
         if phrase not in metadata["description"]:
             fail(f"description is missing {phrase!r}")
@@ -1614,6 +1973,9 @@ def validate() -> None:
         fail("SKILL.md must stay under 500 lines")
     if len(text.encode("utf-8")) > 20000:
         fail("SKILL.md must stay below the conservative 5000-token proxy of 20000 UTF-8 bytes")
+    body = text.split("---", 2)[-1]
+    if len(body.split()) > 1500:
+        fail("SKILL.md body must stay at or below 1500 words")
 
     patterns_text = (SKILL_DIR / "references" / "patterns.md").read_text(encoding="utf-8")
     packets_text = (SKILL_DIR / "references" / "packets.md").read_text(encoding="utf-8")
@@ -1621,61 +1983,49 @@ def validate() -> None:
     instruction_text = "\n".join((text, patterns_text, packets_text, live_session_text))
 
     required_instructions = (
-        "bare explicit Relay invocation also defaults to a live session",
-        "While `ACTIVE`, another explicit Relay invocation preserves the current state, scope, ledger, requirement revision, agent accounting, and pending close question",
-        "treat accompanying text as a user delta, not a new or converted session",
-        "A parent coordinator may carry the user's explicit request to activate Relay in a separate delegated task",
-        "references the source user-authored activation event",
-        "A copied dispatch claim is not evidence",
-        "This is delegated user intent, not activation from a merely quoted or discussed skill name",
-        "A child may use live scope only when the user can directly read and answer its later close question",
-        "the parent must never answer close confirmation on the user's behalf",
-        "Do not persist a session or ask a close question",
-        "Use only `ACTIVE -> STOPPING -> OFF`",
-        "A completion candidate remains `ACTIVE` and asks one close question",
-        "Host responses, `final` markers, task completion, compaction, summaries, resume, and notification wake are lifecycle-neutral",
-        "Background or invisible child coordinators must use one-shot scope",
-        "Before any dispatch or wait, read [live-session.md](references/live-session.md)",
-        "Check notification delivery and automatic wake separately",
-        "A live child requires a direct user channel; otherwise it is one-shot",
-        "When a bare invocation is ambiguous or provides no concrete current objective",
-        "say in ordinary language that the live session is open and will remain active",
-        "`ACTIVE` alone is not a reason to emit a continuity token",
-        "Only the coordinator emits a redeemable opaque handle as one plain-text line",
-        "never Markdown code, raw field/value serialization",
-        "Never use shell sleep, one long blind block, busy-polling, or polling without active work",
-        "Settle every controllable worker before a one-shot final",
-        "Maintain the compact coordinator ledger defined in [live-session.md](references/live-session.md)",
-        "stable functional role",
-        "completed-but-open handle",
-        "The skill imposes no fixed maximum",
-        "Treat a user total as an exact ceiling unless the user says otherwise",
-        "never use nesting to evade a root or child-local ceiling",
-        "Ordinary leaf agents must not spawn agents or invoke orchestration skills",
-        "When the user explicitly asks to use Relay in a separate delegated task or chat",
-        "dispatch that handle as a `child coordinator`, not a leaf",
-        "A child without a direct user channel must run one-shot",
-        "never answers a child's close question for the user",
-        "only when the user explicitly authorizes that additional level",
-        "never copy it into the parent's final or use it as the parent's lifecycle state",
-        "Before creating a writer worktree or invoking any writer handle, read [patterns.md](references/patterns.md)",
-        "Record each owned file as one canonical repository-root-relative POSIX path",
-        "Classify every same-path pair as shared-tree overlap, accidental isolated overlap, or controlled isolated overlap",
-        "Shared-tree overlap is forbidden",
-        "Approved worktrees permit a recorded controlled-overlap group",
-        "A clean Git merge is not enough",
-        "Before delegating work, read [packets.md](references/packets.md)",
+        "Chat preference:",
+        "Current execution:",
+        "Auto is not an execution state",
+        "Bare explicit invocation without a current objective while execution is `OFF`",
+        "Enable **Auto**, remain idle, explain it, and ask for the task",
+        "retain any requested scope; route a current objective normally",
+        "Disable only Auto; do not stop an active Full live run",
+        "Bounded objective, no future-use or full signal",
+        "do not enable Auto",
+        "Auto routes only while execution is `OFF`",
+        "An `ACTIVE` Full live run owns its related deltas",
+        "each later in-scope task starts a fresh routed run; never resurrect a Lite run",
+        "Delegate only when at least two distinct workstreams or review lenses, or a writer plus independent verification, add material value",
+        "Keep small linear work local",
+        "Between tasks Auto creates no agents, ledger, handles, polling, token, close question, or `ACTIVE` lifecycle",
+        "Full before starting work that could create conflicts",
+        "Explicit Full/live wins for the current run",
+        "keep it Full one-shot",
+        "Use Full live for an explicit live signal or when the work truly needs another turn",
+        "including a required approval wait",
+        "state the concrete reason and whether the promotion is Full one-shot or Full live",
+        "Auto never transfers to a new chat, child task, or unrelated session",
+        "Preserve its user-stated scope in chat context",
+        "otherwise do not claim persistence",
+        "Auto uses no token, serialization, or extra authority",
+        "delegated usage",
+        "natural-language or `auto off` disablement",
+        "Auto remains enabled",
+        "enter the full `STOPPING` procedure",
+        "Healthy Lite is self-contained",
+        "Lite permits at most one writer",
+        "More than one possible writer also switches the run to full",
+        "Use bounded native waits while a necessary wave remains active",
+        "If a wait times out with healthy work, report compact progress and wait again",
+        "never create a polling state machine or wait without active work",
+        "Active requirement change switches to Full",
+        "Never use shell sleep, a persistent ledger, resume state, or a close handshake in Lite",
+        "Lite asks no close question and ends `OFF` in the same response",
         "Authority comes from the user request, repository instructions, and host policy",
-        "A packet may convey or narrow it, never expand it",
-        "the packet cannot authorize itself",
-        "Do not ask again for ordinary in-scope work already allowed",
-        "STATUS: DONE | BLOCKED | NEEDS_CONTEXT",
-        "ROLE: LEAF | CHILD_COORDINATOR",
-        "COMMANDS_AND_SIDE_EFFECTS",
-        "all delegation wrappers, tool or thread payloads, schemas, command output, and lifecycle state are internal",
-        "synthesize natural user-facing prose with the outcome, evidence, changed paths, checks, risks, and next action",
-        "the only user-facing lifecycle artifact is the current task coordinator's opaque plain-text resume handle",
-        "the latest requirement revision is addressed and every requested slot is accounted for",
+        "Do not re-ask for ordinary in-scope local work already allowed",
+        "Delegation wrappers, tool payloads, ledgers, raw handoffs, and child lifecycle artifacts stay internal",
+        "Existing full sessions remain full across related follow-ups",
+        "Host `final`, task-complete, compaction, summary, resume, and notification boundaries do not change a Full live lifecycle",
     )
     for phrase in required_instructions:
         if phrase not in instruction_text:
@@ -1728,7 +2078,12 @@ def validate() -> None:
             validate_local_markdown_link(SKILL, target)
 
     openai = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
-    for phrase in ("live $relay-orchestra session", "directly confirm closure in a later message", "allow_implicit_invocation: false"):
+    for phrase in (
+        "Enable $relay-orchestra Auto for suitable work later in this chat",
+        "Explain how it routes bounded and risky work",
+        "ask what I want to do",
+        "allow_implicit_invocation: true",
+    ):
         if phrase not in openai:
             fail(f"openai.yaml is missing {phrase!r}")
     if "latest objective is complete" in openai:
@@ -1736,19 +2091,38 @@ def validate() -> None:
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for phrase in (
-        "bare explicit invocation defaults to a live session",
-        "Start a live Relay Orchestra session",
-        "$relay-orchestra For this message only",
+        "optional chat-scoped Auto preference",
+        "A bare invocation with no task enables Auto for this chat",
+        "It does not open a live session or launch agents",
+        "bare invocation with a concrete bounded task defaults to lite one-shot",
+        "does not silently enable Auto",
+        "$relay-orchestra Run three read-only agents",
+        "$relay-orchestra Start a full live session",
+        "keep using Relay for suitable later tasks in this chat",
+        "While Auto is idle, no agents, ledger, handles, polling, resume token, or close question exist",
+        "disable only the future preference",
+        "does not stop an already active full live session",
+        "Related requests always remain inside an active full live session",
+        "small linear tasks stay local",
+        "Auto is local to the current chat",
+        "does not transfer to a new chat, delegated child task, or unrelated session",
+        "grants no new permissions",
+        "Relay does not claim persistence if the client discarded it",
+        "prompt-matched invocation must remain enabled",
+        "`Full` describes the safety rules; `live` describes how long the session stays open",
+        "A bounded task can use full safety and still finish once, without a close question",
+        "If it must wait for your approval, a later requirement, or safe hand-back of an uncontrolled writer, it becomes full live",
         "You:<br/>close or continue",
         "Result notifications",
         "Automatic coordinator wake",
         "later direct answer to its current close question",
-        "without a close question or cross-turn persistence",
-        "continues through dependent waves, integration, verification, and a completion candidate without requiring another user message",
+        "without a close question, ledger, or cross-turn persistence",
+        "Full distinguishes between a result being delivered and that result automatically waking the coordinator",
+        "It continues through dependent waves, integration, verification, and a proposed completed result without requiring another user message",
         "coordinator remains **In Progress** and a message may wait up to one poll interval",
         "never uses shell sleep, a single long blind block, blind busy-polling, or polling with no active work or next condition",
-        "repeats short native completion polls in its originating turn",
-        "treats an interval timeout as a scheduling tick",
+        "uses bounded native waits only while a necessary dependency wave remains active",
+        "A healthy timeout may produce one compact progress update and another bounded wait",
         "settling every controllable worker before its final response",
         "not a mode, option, scope, toggle, or persistent policy",
         "an active task may retain the skill instructions it already loaded",
@@ -1759,6 +2133,7 @@ def validate() -> None:
         "tokens or credits can be consumed quickly",
         "Open-source Agent Skill for coordinating parallel AI agents",
         "Codex, Claude Code, Gemini CLI, and other Agent Skills clients",
+        "available capabilities vary by client and version",
         "separate Git worktree (a separate project checkout) for each editor",
         "Relay never creates worktrees without asking",
         "lists the exact files it may change and the behavior that must stay compatible",
@@ -1795,6 +2170,20 @@ def validate() -> None:
     platforms = (SKILL_DIR / "references" / "platforms.md").read_text(encoding="utf-8")
     for phrase in (
         "Snapshot: 2026-07-13",
+        "two layers: optional chat-scoped Auto plus separate current execution",
+        "without an objective it enables idle Auto",
+        "It does not open Full live",
+        "Future-use wording",
+        "Codex metadata permits prompt-matched reload",
+        "Auto launches no agents and creates no lifecycle machinery while idle",
+        "retains any user-stated filter",
+        "Auto routes only while execution is `OFF`",
+        "an active Full live session owns related deltas",
+        "Auto is not copied to new chats or child tasks",
+        "Compaction preserves Auto only when the host retained the preference and filter",
+        "no client-independent persistence is claimed",
+        "does not enable Auto unless future-use intent is present",
+        "Promote Lite to Full before unsafe dispatch, naming the reason and whether the run is Full one-shot or Full live",
         "When the user explicitly requests Relay in separate delegated tasks",
         "Treat those tasks as child coordinators with independent local lifecycles and stated count budgets",
         "A live child also requires a user-visible task with direct user-authored follow-up and close confirmation",
@@ -1824,6 +2213,20 @@ def validate() -> None:
 
     live_session = live_session_text
     for phrase in (
+        "Auto is a separate chat preference, never part of this ledger or lifecycle",
+        "Full live takes precedence",
+        "route related deltas and bare reinvocation into this session instead of starting an Auto run",
+        "Starting or closing Full live does not change Auto",
+        "An `auto off` request disables only future automatic routing",
+        "keep the current run active unless the same message clearly stops it",
+        "Never put Auto or its filter in a resume token",
+        "Full one-shot imports the capability, ownership, writer, integration, cancellation, settlement, and verification safeguards",
+        "without opening an `ACTIVE` live session, persistent ledger, or close-confirmation handshake",
+        "After terminal work is audited and every controllable worker is settled",
+        "If a required approval, user decision, background dependency, material mid-run requirement change, or other unresolved lifecycle condition needs another turn, use full live instead",
+        "If control of a dispatched writer unexpectedly becomes unavailable, enter the full live `STOPPING` containment path immediately",
+        "Never report that a bounded run reached `OFF` safely while an uncontrolled possible writer remains",
+        "The close-confirmation rules below apply only to full live",
         "host `final`, `final_answer`, and `task_complete` markers",
         "do not authorize a Relay lifecycle transition",
         "Apply response mutations and replacement-token issuance first",
@@ -1918,14 +2321,41 @@ def validate() -> None:
         "explicit_one_shot_auto_deactivates_without_close_question": {
             "one_shot_scope", "bounded_wave", "native_one_shot_completion_polling", "short_bounded_poll_interval", "one_shot_wait_opt_in_exception", "strict_dependency_wait", "bounded_timeout", "disclosure_once", "main_turn_in_progress_disclosure", "message_may_wait_up_to_poll_interval", "same_coordinator_turn", "bound_to_originating_message_and_final_response", "no_arbitrary_poll_deadline", "short_poll_timeout", "poll_timeout_is_scheduling_tick", "poll_timeout_not_task_deadline", "check_newer_input_between_intervals", "check_delivered_results_between_intervals", "process_newer_input_between_intervals", "process_delivered_results_between_intervals", "healthy_workers_not_interrupted", "repeat_bounded_poll", "authorized_dependent_work_remains", "dispatch_authorized_dependent_work", "stop_for_terminal_results_and_synthesis", "stop_for_user_cancel_or_redirect", "stop_for_user_specified_overall_limit", "stop_for_genuine_runtime_blocker", "workers_terminal", "synthesis_complete", "no_shell_sleep", "no_long_blind_block", "no_busy_poll", "no_poll_without_active_work_or_next_condition", "no_later_user_wake_dependency", "no_cross_turn_persistence", "settle_controllable_workers_before_final_response", "controllable_workers_closed", "no_close_question", "same_turn_deactivation", "OFF"
         },
-        "bare_explicit_invocation_defaults_to_live_session": {
-            "default_live_scope", "ACTIVE", "responsive_session", "later_close_confirmation_required"
+        "bare_bounded_invocation_defaults_to_lite_one_shot": {
+            "default_lite_one_shot", "bounded_objective", "no_speculative_probes",
+            "bounded_waits_only_while_wave_active", "healthy_timeout_may_repeat_wait",
+            "no_ledger", "no_close_question", "same_response_OFF",
         },
-        "ambiguous_bare_invocation_opens_clean_live_session": {
-            "ambiguous_activation_intent", "no_current_objective", "default_live_scope",
-            "activation_acknowledgement", "live_session_opened_plain_language",
-            "request_next_task", "no_ledger_output", "no_session_token",
-            "no_raw_lifecycle_serialization", "no_markdown_code", "remain_ACTIVE",
+        "bare_invocation_enables_auto_idle": {
+            "bare_explicit_invocation", "no_current_objective", "auto_chat_preference_enabled",
+            "current_execution_OFF", "complete_auto_notice", "request_next_task",
+            "no_agents_while_idle", "no_ledger_output", "no_session_token",
+            "no_close_question", "no_raw_lifecycle_serialization",
+        },
+        "future_use_signal_enables_auto_idle": {
+            "natural_language_future_use_signal", "no_current_objective",
+            "auto_chat_preference_enabled", "current_execution_OFF", "complete_auto_notice",
+            "request_next_task", "no_agents_while_idle",
+        },
+        "bounded_task_plus_future_use_keeps_auto": {
+            "current_bounded_task_routes_normally", "lite_one_shot", "same_response_OFF",
+            "auto_remains_enabled", "compact_auto_receipt", "no_close_question",
+        },
+        "later_bounded_task_under_auto_starts_fresh": {
+            "fresh_routed_run", "do_not_resurrect_previous_lite", "lite_one_shot",
+            "same_response_OFF", "auto_remains_enabled",
+        },
+        "auto_off_does_not_stop_active_live": {
+            "auto_preference_disabled", "active_full_live_preserved",
+            "handles_and_ledger_preserved", "no_session_stop",
+        },
+        "active_full_live_precedes_auto": {
+            "active_full_live_precedence", "related_delta", "no_fresh_auto_run",
+            "preserve_session_accounting", "remain_ACTIVE",
+        },
+        "scoped_auto_filters_later_tasks": {
+            "record_user_scoped_filter", "reviews_only", "exclude_implementation",
+            "task_outside_auto_scope", "keep_work_local", "no_relay_dispatch",
         },
         "one_shot_blocked_handoff": {
             "one_shot_scope", "dirty_tree_detected", "unattributed_dirty_paths_user_owned",
@@ -2191,7 +2621,7 @@ def validate() -> None:
         if transcript_id in transcript_ids:
             fail(f"duplicate transcript id: {transcript_id}")
         transcript_ids.add(transcript_id)
-        if transcript["scope"] not in {"live", "one_shot"}:
+        if transcript["scope"] not in {"live", "one_shot", "auto_idle"}:
             fail(f"invalid transcript scope: {transcript_id}")
         capabilities = transcript["capabilities"]
         if (
@@ -2235,6 +2665,12 @@ def validate() -> None:
         validate_writer_continuation(transcript)
         validate_dirty_path_flow(transcript)
 
+        if transcript["scope"] == "auto_idle":
+            validate_auto_idle_activation(transcript)
+            expectation_tokens.update(
+                token for step in transcript["steps"] for token in step["expect"]
+            )
+            continue
         if transcript["scope"] == "one_shot":
             validate_one_shot(transcript, expectation_tokens)
             continue
@@ -2714,8 +3150,8 @@ def validate() -> None:
         "one_shot_blocked_handoff",
         "stop_during_shared_write_and_late_result",
         "persistence_fallback_continuous_bounded_waves",
-        "bare_explicit_invocation_defaults_live_and_requires_later_close",
-        "ambiguous_bare_invocation_opens_clean_live_session",
+        "explicit_full_live_invocation_requires_later_close",
+        "bare_invocation_enables_auto_idle",
         "new_work_cancels_pending_close",
         "close_confirmation_requires_separate_unstable_acceptance",
         "pending_close_confirmation_fallback",
@@ -2771,13 +3207,13 @@ def validate() -> None:
     }
     if not required_continuous.issubset(continuous_tokens):
         fail("no-auto-wake transcript must continue through verification to an ACTIVE completion candidate")
-    bare_live = next(
+    explicit_live = next(
         transcript for transcript in transcripts
-        if transcript["id"] == "bare_explicit_invocation_defaults_live_and_requires_later_close"
+        if transcript["id"] == "explicit_full_live_invocation_requires_later_close"
     )
-    bare_live_tokens = {token for step in bare_live["steps"] for token in step["expect"]}
-    required_bare_live = {
-        "default_live_scope",
+    explicit_live_tokens = {token for step in explicit_live["steps"] for token in step["expect"]}
+    required_explicit_live = {
+        "explicit_full_live_scope",
         "OFF_to_ACTIVE",
         "completion_candidate",
         "pending_close_confirmation",
@@ -2788,13 +3224,13 @@ def validate() -> None:
         "ACTIVE_to_STOPPING",
         "STOPPING_to_OFF",
     }
-    if not required_bare_live.issubset(bare_live_tokens):
-        fail("bare explicit invocation transcript must stay live until later direct close confirmation")
-    ambiguous_live = next(
+    if not required_explicit_live.issubset(explicit_live_tokens):
+        fail("explicit full live invocation must stay live until later direct close confirmation")
+    auto_idle = next(
         transcript for transcript in transcripts
-        if transcript["id"] == "ambiguous_bare_invocation_opens_clean_live_session"
+        if transcript["id"] == "bare_invocation_enables_auto_idle"
     )
-    validate_ambiguous_live_activation(ambiguous_live)
+    validate_auto_idle_activation(auto_idle)
     for event in (
         "yield", "delivery_batch", "worker_result", "notification_wake", "wait_timeout",
         "host_final", "task_complete", "compaction",
@@ -2803,7 +3239,10 @@ def validate() -> None:
             fail(f"transcripts are missing {event!r} event")
     for token in (
         "one_shot_scope",
-        "default_live_scope",
+        "enable_auto_for_this_chat",
+        "current_execution_OFF",
+        "complete_auto_notice",
+        "no_agents_while_idle",
         "same_turn_deactivation",
         "no_close_question",
         "no_cross_turn_persistence",
@@ -2943,8 +3382,6 @@ def validate() -> None:
         "zero_nonterminal_handles",
         "handle_continuity_vacuously_satisfied",
         "no_session_token",
-        "activation_acknowledgement",
-        "live_session_opened_plain_language",
         "request_next_task",
         "no_ledger_output",
         "no_raw_lifecycle_serialization",

@@ -1,0 +1,117 @@
+[
+  {
+    "id": "bare_invocation_enables_auto_idle",
+    "prompt": "$relay-orchestra",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["bare_explicit_invocation", "no_current_objective", "enable_auto_for_this_chat", "no_current_run"]},
+      {"event": "reply", "expect": ["complete_auto_notice", "bounded_tasks_start_lite", "risky_or_cross_turn_may_use_full_with_reason", "no_agents_while_idle", "delegated_agents_consume_usage", "no_new_permissions", "natural_language_or_auto_off_disables", "request_task", "no_ledger_or_resume_token_or_close_question"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "future_use_signal_enables_auto_idle",
+    "prompt": "$relay-orchestra Use this for suitable work from now on in this chat. I do not have a concrete task yet.",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["natural_language_future_use_signal", "no_current_objective", "enable_auto_for_this_chat", "no_current_run"]},
+      {"event": "reply", "expect": ["complete_auto_notice", "request_task", "no_agents_while_idle", "no_active_lifecycle", "no_raw_user_facing_state"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "bounded_task_with_future_use_runs_lite_and_keeps_auto",
+    "prompt": "$relay-orchestra Review the current diff with two read-only reviewers, and keep using Relay for later tasks in this chat.",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["concrete_bounded_objective", "future_use_signal", "enable_auto_for_this_chat", "lite_one_shot"]},
+      {"event": "dispatch", "expect": ["read_only_leaves", "bounded_waits_only_while_wave_active", "healthy_timeout_may_repeat_wait", "no_persistent_ledger"]},
+      {"event": "final", "expect": ["artifact_verification", "controllable_workers_settled", "no_close_question", "compact_auto_remains_notice", "OFF"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "later_bounded_task_under_auto_is_fresh_lite",
+    "prompt": "Now compare these two bounded API documents and synthesize once.",
+    "initial": {"auto": "ENABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["suitable_task_under_auto", "fresh_run", "do_not_resurrect_previous_lite", "lite_one_shot"]},
+      {"event": "dispatch", "expect": ["bounded_waits_only_while_wave_active", "healthy_timeout_may_repeat_wait", "no_speculative_probes", "no_persistent_ledger"]},
+      {"event": "final", "expect": ["artifact_verification", "compact_auto_remains_notice", "no_close_question", "OFF"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "bare_bounded_task_does_not_enable_auto",
+    "prompt": "$relay-orchestra run two read-only reviewers and synthesize once.",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["explicit_activation", "concrete_bounded_objective", "no_future_use_signal", "lite_one_shot", "auto_unchanged"]},
+      {"event": "dispatch", "expect": ["read_only_leaves", "bounded_waits_only_while_wave_active", "healthy_timeout_may_repeat_wait", "no_speculative_probes", "no_persistent_ledger"]},
+      {"event": "final", "expect": ["artifact_verification", "controllable_workers_settled", "no_close_question", "OFF"]}
+    ],
+    "final": {"auto": "DISABLED", "execution": "OFF"}
+  },
+  {
+    "id": "auto_promotes_to_full_one_shot",
+    "prompt": "Use two writers in already-approved isolated worktrees, integrate them, and synthesize once.",
+    "initial": {"auto": "ENABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["suitable_task_under_auto", "multiple_writers", "promote_before_dispatch", "full_one_shot", "promotion_notice", "concrete_reason_multiple_writers", "notice_says_full_one_shot"]},
+      {"event": "dispatch", "expect": ["worktrees_preapproved", "writer_map_recorded", "controlled_overlap_only", "no_persistent_ledger"]},
+      {"event": "final", "expect": ["writers_terminal_and_audited", "integration_verified", "controllable_workers_settled", "compact_auto_remains_notice", "no_close_question", "OFF"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "auto_promotes_to_full_live",
+    "prompt": "Use two overlapping writers; worktree approval is still required from me on a later turn.",
+    "initial": {"auto": "ENABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["suitable_task_under_auto", "missing_required_approval", "genuine_cross_turn_lifecycle", "full_live", "promotion_notice", "concrete_reason_required_approval_wait", "notice_says_full_live"]},
+      {"event": "coordinator", "expect": ["request_approval", "no_unsafe_writer_dispatch", "remain_ACTIVE"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "ACTIVE"}
+  },
+  {
+    "id": "auto_off_does_not_stop_active_full_live",
+    "prompt": "Stop using Relay automatically for later tasks, but keep this current live review running.",
+    "initial": {"auto": "ENABLED", "execution": "ACTIVE"},
+    "steps": [
+      {"event": "route", "expect": ["natural_language_auto_off", "disable_future_preference_only", "current_live_session_not_targeted_for_stop"]},
+      {"event": "coordinator", "expect": ["auto_disabled_plain_language", "preserve_current_full_live_run", "preserve_handles_and_ledger", "remain_ACTIVE"]}
+    ],
+    "final": {"auto": "DISABLED", "execution": "ACTIVE"}
+  },
+  {
+    "id": "active_full_live_precedes_auto",
+    "prompt": "With Auto enabled and Full live ACTIVE, add a test reviewer to this migration.",
+    "initial": {"auto": "ENABLED", "execution": "ACTIVE"},
+    "steps": [
+      {"event": "route", "expect": ["active_full_live_precedence", "related_delta", "no_fresh_auto_run", "preserve_session_accounting"]},
+      {"event": "coordinator", "expect": ["route_into_existing_full_live", "preserve_handles_and_ledger", "remain_ACTIVE"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "ACTIVE"}
+  },
+  {
+    "id": "scoped_auto_filters_later_tasks",
+    "prompt": "$relay-orchestra Use Auto for code reviews only, never implementation; then later ask for a small implementation.",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["natural_language_future_use_signal", "enable_auto_for_this_chat", "record_user_scoped_filter", "reviews_only", "exclude_implementation"]},
+      {"event": "later_task", "expect": ["task_outside_auto_scope", "keep_work_local", "no_relay_dispatch", "current_execution_OFF"]}
+    ],
+    "final": {"auto": "ENABLED", "execution": "OFF"}
+  },
+  {
+    "id": "lost_writer_control_enters_stopping",
+    "prompt": "$relay-orchestra run one bounded writer, then cancellation loses control of its handle.",
+    "initial": {"auto": "DISABLED", "execution": "OFF"},
+    "steps": [
+      {"event": "route", "expect": ["lite_one_shot", "verified_clean_exclusive_writer"]},
+      {"event": "safety", "expect": ["unexpected_writer_control_loss", "promote_to_full_live", "promotion_notice", "concrete_reason_uncontrolled_writer", "notice_says_full_live", "enter_STOPPING", "freeze_dispatch", "freeze_repository_operations", "preserve_exact_accounting_and_continuity", "risk_disclosed"]},
+      {"event": "handoff", "expect": ["no_false_OFF", "later_user_risk_acceptance_if_writer_remains_uncontrolled"]}
+    ],
+    "final": {"auto": "DISABLED", "execution": "STOPPING"}
+  }
+]

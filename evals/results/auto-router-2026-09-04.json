@@ -1,0 +1,76 @@
+{
+  "date": "2026-09-04",
+  "baseline_runner": "fresh gpt-5.6-luna subagent, pre-Auto working tree",
+  "green_runner": "fresh gpt-5.6-luna subagent, updated working tree",
+  "blind_judge": "fresh gpt-5.6-luna subagent with shuffled unlabeled variants",
+  "scenarios": {
+    "bare_invocation": {
+      "baseline": "Opened Full live ACTIVE and asked for a task.",
+      "green": "Enabled chat-local Auto, kept execution OFF, explained boundaries and asked for a task.",
+      "preferred": "green"
+    },
+    "future_use_without_task": {
+      "baseline": "Opened Full live ACTIVE.",
+      "green": "Enabled idle Auto with no agents or lifecycle state.",
+      "preferred": "green"
+    },
+    "bounded_review_only": {
+      "baseline": "Used Lite one-shot and ended OFF.",
+      "green": "Used Lite one-shot and ended OFF with clearer read-only and verification boundaries.",
+      "preferred": "green"
+    },
+    "bounded_review_plus_future_use": {
+      "baseline": "Converted the bounded review into Full live ACTIVE.",
+      "green": "Ran a Lite one-shot, ended OFF, and retained only the Auto preference.",
+      "preferred": "green"
+    }
+  },
+  "blind_ab_gate": "PASS",
+  "post_fix_behavioral_gate": {
+    "runner": "fresh gpt-5.6-luna subagent, read-only independent scenarios",
+    "result": "PASS",
+    "cases": {
+      "later_two_lens_review_routes_lite": "PASS",
+      "small_linear_task_stays_local": "PASS",
+      "active_full_live_precedes_auto": "PASS",
+      "reviews_only_scope_excludes_implementation": "PASS",
+      "healthy_lite_timeout_repeats_bounded_wait": "PASS"
+    }
+  },
+  "codex_host_smoke": {
+    "runner": "new gpt-5.6-luna Codex task using the installed skill, archived after completion",
+    "result": "PASS",
+    "steps": [
+      "A bare explicit invocation enabled Auto without agents or lifecycle artifacts.",
+      "A later unprefixed two-lens task selected Lite one-shot and returned clean prose.",
+      "Natural-language auto off disabled the preference without another state change.",
+      "The exact parallel-research near miss after disablement did not invoke Relay and only requested the missing topics."
+    ]
+  },
+  "mechanical_evidence_after_fixes": {
+    "project_validator": "PASS",
+    "unit_tests": "140 passed",
+    "skillforge_validator": "PASS",
+    "skillforge_static_evals": "30/30 passed",
+    "docs_safety": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "adversarial_cycles": [
+    {
+      "cycle": 1,
+      "result": "FIXES_REQUIRED",
+      "resolved": "Full one-shot termination, lost-writer STOPPING, Lite router fixtures, and bounded intent were clarified and validated."
+    },
+    {
+      "cycle": 2,
+      "result": "FIXES_REQUIRED",
+      "resolved": "Implicit and active-Full triggers, scoped Auto, healthy repeated waits, prompt causality, opaque-token leakage, compact lifecycle serialization, no-timeout completion, and auditable evidence were fixed."
+    },
+    {
+      "cycle": 3,
+      "result": "PASS_NO_BLOCKERS",
+      "resolved": "Fresh review reproduced 140 passing tests and found no concrete release blocker in routing, leakage, authority, persistence, or evidence."
+    }
+  ],
+  "notes": "Three adversarial cycles were completed; the first two findings were fixed and the final fresh reviewer passed the release with no blockers."
+}

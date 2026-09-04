@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -228,6 +229,89 @@ class MarkdownLinkValidationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "broken local anchor"):
                 validator.validate_local_markdown_link(source, "reference.md#fake-heading")
+
+
+class LiteModeFixtureTests(unittest.TestCase):
+    def test_mode_transitions_and_skill_local_evals_are_validated(self) -> None:
+        validator.validate_mode_transitions()
+        validator.validate_skill_local_evals()
+
+    def test_mode_transition_rejects_missing_stopping_safeguard(self) -> None:
+        source = validator.ROOT / "evals" / "mode-transitions.json"
+        scenarios = json.loads(source.read_text(encoding="utf-8"))
+        lost_control = next(item for item in scenarios if item["id"] == "lost_writer_control_enters_stopping")
+        safety_step = next(step for step in lost_control["steps"] if step["event"] == "safety")
+        safety_step["expect"].remove("freeze_repository_operations")
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / "mode-transitions.json"
+            invalid.write_text(json.dumps(scenarios), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "lacks required guarantees"):
+                validator.validate_mode_transitions(invalid)
+
+    def test_mode_transition_rejects_reordered_events(self) -> None:
+        source = validator.ROOT / "evals" / "mode-transitions.json"
+        scenarios = json.loads(source.read_text(encoding="utf-8"))
+        scenarios[0]["steps"].reverse()
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / "mode-transitions.json"
+            invalid.write_text(json.dumps(scenarios), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "invalid event order"):
+                validator.validate_mode_transitions(invalid)
+
+    def test_mode_transition_rejects_unrelated_prompt(self) -> None:
+        source = validator.ROOT / "evals" / "mode-transitions.json"
+        scenarios = json.loads(source.read_text(encoding="utf-8"))
+        for scenario_id in ("active_full_live_precedes_auto", "scoped_auto_filters_later_tasks"):
+            scenario = next(item for item in scenarios if item["id"] == scenario_id)
+            scenario["prompt"] = "Please summarize this unrelated paragraph."
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / "mode-transitions.json"
+            invalid.write_text(json.dumps(scenarios), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "prompt no longer proves its route"):
+                validator.validate_mode_transitions(invalid)
+
+    def test_idle_auto_transition_rejects_contradictory_active_token(self) -> None:
+        source = validator.ROOT / "evals" / "mode-transitions.json"
+        scenarios = json.loads(source.read_text(encoding="utf-8"))
+        scenario = next(item for item in scenarios if item["id"] == "bare_invocation_enables_auto_idle")
+        scenario["steps"][1]["expect"].append("OFF_to_ACTIVE")
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / "mode-transitions.json"
+            invalid.write_text(json.dumps(scenarios), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "contradictory guarantees"):
+                validator.validate_mode_transitions(invalid)
+
+    def test_auto_eval_rejects_added_contradictory_assertion(self) -> None:
+        source = validator.SKILL_DIR / "evals"
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / "evals"
+            shutil.copytree(source, copied)
+            scenario = copied / "scenarios" / "09-bare-enables-auto.md"
+            text = scenario.read_text(encoding="utf-8")
+            scenario.write_text(
+                text.replace("runs: 3", '  - "Launch an agent immediately."\nruns: 3'),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "assertions changed or contradict"):
+                validator.validate_skill_local_evals(copied)
+
+    def test_bare_auto_enablement_finishes_idle(self) -> None:
+        scenarios = json.loads(
+            (validator.ROOT / "evals" / "mode-transitions.json").read_text(encoding="utf-8")
+        )
+        scenario = next(item for item in scenarios if item["id"] == "bare_invocation_enables_auto_idle")
+        self.assertEqual(scenario["final"], {"auto": "ENABLED", "execution": "OFF"})
+
+    def test_auto_off_cannot_stop_active_live_execution(self) -> None:
+        source = validator.ROOT / "evals" / "mode-transitions.json"
+        scenarios = json.loads(source.read_text(encoding="utf-8"))
+        scenario = next(item for item in scenarios if item["id"] == "auto_off_does_not_stop_active_full_live")
+        scenario["final"]["execution"] = "OFF"
+        with tempfile.TemporaryDirectory() as directory:
+            invalid = Path(directory) / "mode-transitions.json"
+            invalid.write_text(json.dumps(scenarios), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "preference/execution state"):
+                validator.validate_mode_transitions(invalid)
 
 
 class UserFacingContractRegressionTests(unittest.TestCase):
@@ -694,6 +778,9 @@ class UserFacingContractRegressionTests(unittest.TestCase):
             "s=ACTIVE;rev=1",
             "```text\ns=ACTIVE;rev=1\n```",
             "s=ACTIVE\nrev=1",
+            "state=ACTIVE; revision=1",
+            "execution=OFF, auto=ENABLED",
+            "rly1_T8rGv4Yh2sKp7Nq5Wm3Bx9Zd",
         )
         for raw_text in raw_texts:
             with self.subTest(raw_text=raw_text):
@@ -708,29 +795,41 @@ class UserFacingContractRegressionTests(unittest.TestCase):
                         "outcome", "evidence", "changed_paths", "checks", "risks", "next_action",
                     ],
                 }
-                with self.assertRaisesRegex(ValueError, "internal payload signature"):
-                    validator.validate_user_facing_boundary(output)
+                if raw_text.startswith("rly1_"):
+                    with self.assertRaisesRegex(ValueError, "untracked opaque resume handle"):
+                        validator.validate_user_facing_boundary(output)
+                else:
+                    with self.assertRaisesRegex(ValueError, "internal payload signature"):
+                        validator.validate_user_facing_boundary(output)
+
+    def test_one_shot_may_complete_without_a_timeout(self) -> None:
+        scenario = transcript("explicit_one_shot_bounded_completion")
+        scenario["steps"] = [
+            step for index, step in enumerate(scenario["steps"])
+            if index not in {3, 4}
+        ]
+        validator.validate_one_shot(scenario, set())
 
 
-class AmbiguousActivationRegressionTests(unittest.TestCase):
-    def test_ambiguous_bare_invocation_opens_with_clean_acknowledgement(self) -> None:
-        validator.validate_ambiguous_live_activation(
-            transcript("ambiguous_bare_invocation_opens_clean_live_session")
+class AutoIdleActivationRegressionTests(unittest.TestCase):
+    def test_bare_invocation_enables_idle_auto_with_complete_notice(self) -> None:
+        validator.validate_auto_idle_activation(
+            transcript("bare_invocation_enables_auto_idle")
         )
 
-    def test_ambiguous_activation_requires_plain_language_acknowledgement(self) -> None:
-        scenario = transcript("ambiguous_bare_invocation_opens_clean_live_session")
-        scenario["steps"][1]["expect"].remove("live_session_opened_plain_language")
+    def test_auto_enablement_requires_usage_notice(self) -> None:
+        scenario = transcript("bare_invocation_enables_auto_idle")
+        scenario["steps"][1]["expect"].remove("delegated_agents_consume_usage")
 
-        with self.assertRaisesRegex(ValueError, "open visibly"):
-            validator.validate_ambiguous_live_activation(scenario)
+        with self.assertRaisesRegex(ValueError, "idle Auto"):
+            validator.validate_auto_idle_activation(scenario)
 
-    def test_ambiguous_activation_rejects_empty_session_token(self) -> None:
-        scenario = transcript("ambiguous_bare_invocation_opens_clean_live_session")
+    def test_auto_idle_rejects_empty_session_token(self) -> None:
+        scenario = transcript("bare_invocation_enables_auto_idle")
         scenario["steps"][1]["expect"].append("session_token")
 
-        with self.assertRaisesRegex(ValueError, "empty lifecycle artifacts"):
-            validator.validate_ambiguous_live_activation(scenario)
+        with self.assertRaisesRegex(ValueError, "session lifecycle artifacts"):
+            validator.validate_auto_idle_activation(scenario)
 
 
 class ResumeTokenTranscriptRegressionTests(unittest.TestCase):
