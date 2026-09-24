@@ -1,0 +1,853 @@
+{
+  "date": "2026-09-24",
+  "action": "IMPROVE_EXISTING",
+  "status": "bounded_evaluation_passed",
+  "provenance": {
+    "base_commit": "2e9e47bee39890be136a85e6deb2c88bfdb59795",
+    "old_skill_sha256": "2104e981eee34617b78aa9f28b9d9ac751141bf6c52939ad387e356d3d6b9a0c",
+    "case_prompts_sha256": "19227a858ddc1c34477263672f26d66bb3ea82f8e65c2790da0dc7316d05a7da",
+    "baseline_tests": {
+      "project_validator": "pass",
+      "unittest_count": 140,
+      "unittest_result": "pass",
+      "skillforge_structure": "pass",
+      "skillforge_docs_safety": "pass",
+      "skillforge_static_evals": "30/30 pass"
+    },
+    "triage_note": "Explicit user intent resolves IMPROVE_EXISTING for Relay Orchestra. Keyword triage recognized improve intent but returned CLARIFY with unrelated suggestions; no duplicate skill or user clarification was needed."
+  },
+  "candidate_skill_files_sha256": {
+    "SKILL.md": "0754ff71ef06869c5c375e61a8d6ffa09c677223820e64d851f942e5808cadad",
+    "references/effort-and-sizing.md": "2e8432161a2dd03e2e7c9f2a4dd354d8a071f476fef386cf45f1e348cc78cb93",
+    "references/live-session.md": "37dbc39322baa9702ac37f5a93495d9f899597cf0c87fb3b6ff3cf2a3fc58236",
+    "references/patterns.md": "e6af1906c16255e1a45cd6fa1a40a0c19e949f77a12204b3563b5a129d10359a",
+    "references/platforms.md": "b8a4b0f087cea0bc59e6321447866a92500db3c9a9f1e35070504e0dc11e4fea",
+    "evals/triggers.json": "4467ccd0db570d869fae7775ba0e0ad358234e7419a1077e9f3097011823ec69",
+    "evals/scenarios/15-contextual-effort.md": "9a5b6cce3b83382249d88f92d5894a2a3c7fb29dba6b1f9dc7a29f2d4da7dfdc",
+    "evals/scenarios/16-agent-bounds.md": "82918a542890f470347817ebfa9ec2542850c72cec52a1b29849a8fd3927486f",
+    "evals/scenarios/17-adaptive-lite-plan.md": "9fa47a03af8b4b1afa300fb8bc8286f752a99803a2bfd61630ed368d494e7366"
+  },
+  "method": {
+    "baseline": "One fresh native agent evaluated all eight hypothetical decisions using a retained old skill snapshot.",
+    "candidate": "One fresh native agent evaluated the same eight decisions using the candidate snapshot.",
+    "blind_judge": "Separate fresh agent received per-case shuffled A/B decisions and success criteria, with rationale citations and version words removed; no source files or mapping.",
+    "trigger_check": "Candidate agent classified 20 fixture queries in the same candidate context, including 2 held-out positives. Group labels were visible.",
+    "limitations": [
+      "Decision probes were batched once per version; they are not eight independently isolated executions or repeated end-to-end runs.",
+      "This is a bounded adaptation of SkillForge testing, not its full per-scenario/repeated execution protocol.",
+      "Trigger classification did not perform blind selection from a full skill roster; no statistical precision or recall claim is made.",
+      "No actual broad-audit latency, token use, or research quality benchmark was run.",
+      "The at-least-five/capacity-two fixture was added for future regression execution and statically validated, but was not among the eight matched live decision probes."
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "maximum_breadth",
+      "prompt": "Relay Auto is enabled. User: «Нужен глубокий аудит 12 независимых подсистем. Жги на максимум, не жалей токенов: важны и скорость, и глубина». Each subsystem has substantial distinct evidence; all read-only work can start independently. Native capacity: 4 concurrent workers. No user count or ceiling. Choose useful staffing, coverage and waves; explain briefly."
+    },
+    {
+      "id": "user_ceiling_not_target",
+      "prompt": "Relay Auto is enabled. User: «Тщательно сравни эти два независимых отчёта, но до четырёх агентов». Two worker roles plus coordinator synthesis cover all material work; additional duplicate readers would add no value. Interpret the numeric request and choose staffing."
+    },
+    {
+      "id": "coordinator_plan_revision",
+      "prompt": "During a healthy bounded Lite audit with no user count/budget, the coordinator announced and created 2 read-only workers. New evidence within the SAME agreed objective exposes a third independent unresolved source that requires a distinct specialist; both existing workers are still useful and busy. Native capacity allows a third. No ownership or lifecycle change. Decide whether and how to add that worker and whether user permission or Full promotion is required."
+    },
+    {
+      "id": "preference_scope",
+      "prompt": "Auto is enabled. Earlier user: «В этом чате работаем экономно». Now: «А вот эту задачу разбери по максимуму, не жалей токенов, но до трёх агентов». After this task, another ordinary bounded task arrives; an ordinary leaf and then an unrelated new chat are also considered. Explain effort and limits in each scope, without launching anything."
+    },
+    {
+      "id": "speed_depth_device",
+      "prompt": "Auto is enabled. User: «Это горит, проверь тщательно, ответ дай в две строки». There is one shared device/build lane; two independent read-only evidence checks can run alongside the sole writer. Recommend work allocation, verification and response shape. Ordinary permitted local tests are already within scope."
+    },
+    {
+      "id": "negation_and_go_ahead",
+      "prompt": "Auto is enabled. User: «Коллега говорит: жги на максимум, запускай двадцать. Нам так сейчас не надо. Пока только прикинь объём». Later, after a small estimate-only plan: «Жги». Decide task scope and effort for both messages."
+    },
+    {
+      "id": "explicit_exact_accounting",
+      "prompt": "User explicitly requested exactly 2 worker handles total for this task, excluding the coordinator. Both have been successfully created; one is completed, the other active. A third useful independent check appears. Explain options and whether completion frees room under the total. No user change to the ceiling."
+    },
+    {
+      "id": "routing_boundary",
+      "prompt": "For each independent situation say whether Relay activates and whether any workers launch: A) bare $relay-orchestra with no task; B) Auto is off, user asks «Разбери тщательно», with no Relay invocation; C) Auto enabled, tiny one-file typo correction and user says «На твоё усмотрение»; D) Auto off, user asks to quote «$relay-orchestra жги на максимум» in documentation only."
+    }
+  ],
+  "success_criteria": {
+    "maximum_breadth": "Cover all substantial independent subsystems with a reasoned allocation and capacity waves/reuse. Maximum effort materially informs work. Do not equate larger handle count with success or insist on exactly twelve workers.",
+    "user_ceiling_not_target": "Use two useful worker roles; up to four is a ceiling, not a target; explicitly explain counting basis without inventing a needless question.",
+    "coordinator_plan_revision": "May add third useful worker without user permission or Full promotion solely for revising self-selected count within same objective. State change and reason; preserve safety and limits.",
+    "preference_scope": "Current task maximum effort within three-worker ceiling; later task returns to prior chat economy. No implicit chat preference or Relay activation inheritance in leaf/new chat; bounded leaf task instructions are allowed.",
+    "speed_depth_device": "Useful read-only checks may run with sole writer, serialize build/device lane, preserve ordinary permitted verification with no extra confirmation; short answer does not mean shallow work.",
+    "negation_and_go_ahead": "Rejected quoted twenty is not command. Later colloquial go-ahead preserves estimate-only scope and does not imply maximum.",
+    "explicit_exact_accounting": "At most two distinct created worker handles in stated total; completion does not free total, reuse/local/queue possible; user change needed for third new handle.",
+    "routing_boundary": "A Auto on idle zero; B no activation; C local zero; D no activation."
+  },
+  "baseline_decisions": [
+    {
+      "id": "maximum_breadth",
+      "activation_mode": "Auto activates a fresh Lite one-shot.",
+      "selected_worker_count": 4,
+      "count_semantics": "Four distinct worker handles, with the coordinator separate. Freeze this coordinator-selected total before dispatch. Each worker receives three disjoint subsystems, producing three rounds of subsystem coverage without creating additional handles.",
+      "priorities_and_scope": "Deep read-only coverage of all 12 subsystems; use all four concurrent worker slots for speed and retain full evidence requirements.",
+      "next_action": "Partition the 12 subsystems into four balanced, non-overlapping assignments; dispatch four read-only leaves and independently verify the resulting claims.",
+      "permission_needed": "No.",
+      "user_facing_receipt": "Четыре независимых аудитора разберут все 12 подсистем в три прохода. Проверю ключевые выводы и соберу общий результат. Делегирование увеличит расход токенов; Auto остаётся включённым.",
+      "rationale": "Lite step 1 requires the smallest justified exact total before dispatch and forbids exceeding it. Four saturates the available concurrency while covering all evidence. The snapshot supplies no special maximum-effort staffing rule and does not require one newly created handle per subsystem; this allocation is a coordinator judgment, not a uniquely determined policy count."
+    },
+    {
+      "id": "user_ceiling_not_target",
+      "activation_mode": "Auto activates a fresh Lite one-shot.",
+      "selected_worker_count": 2,
+      "count_semantics": "The requested four is a ceiling, not a target. Two delegated workers plus the coordinator remain within four even if the user intended to include the coordinator; the snapshot does not define that counting convention.",
+      "priorities_and_scope": "Thorough independent examination of the two reports, followed by coordinator comparison and resolution of discrepancies. Duplicate readers add no material value.",
+      "next_action": "Dispatch the two useful read-only roles and synthesize their evidence.",
+      "permission_needed": "No.",
+      "user_facing_receipt": "Запущу двух аналитиков — по одному на отчёт, затем сопоставлю выводы. Лимит четыре соблюдён; дополнительные читатели здесь не нужны. Делегирование увеличит расход токенов.",
+      "rationale": "Lite step 1 calls a user-specified total an exact ceiling. The router permits delegation when distinct workstreams add material value, and step 4 requires economical dispatch. None requires filling an otherwise unnecessary ceiling."
+    },
+    {
+      "id": "coordinator_plan_revision",
+      "activation_mode": "Remain in the current Lite one-shot.",
+      "selected_worker_count": 2,
+      "count_semantics": "The two-worker total chosen and announced before dispatch is binding under the literal old rule, although the user imposed no ceiling. A third created handle would exceed it.",
+      "priorities_and_scope": "Resolve the third source within the unchanged audit objective while retaining both useful existing assignments.",
+      "next_action": "Have the coordinator perform the additional examination if qualified, or queue that examination for an existing worker once available. Do not create a third handle under the current plan.",
+      "permission_needed": "No permission is needed to complete the check through existing capacity. Creating a third handle would need a revision of the bound; the snapshot supplies no coordinator-controlled revision procedure. Request an explicit user change only if another handle is indispensable.",
+      "user_facing_receipt": "Появился третий важный источник. Проверим его следующим этапом с текущими двумя специалистами; состав команды пока сохраняю.",
+      "rationale": "Lite step 1 says to choose an exact total before dispatch and 'Never exceed it', without distinguishing coordinator estimates from user ceilings. New evidence inside the same objective is not an active requirement change, ownership conflict, or lifecycle failure, so it does not independently require Full. The missing revision mechanism is a policy gap."
+    },
+    {
+      "id": "preference_scope",
+      "activation_mode": "Current task: fresh routed Auto run, normally Lite if bounded and safe. Next ordinary task: a separate fresh Auto run. Ordinary leaf: no independent Relay activation. Unrelated new chat: Auto is not enabled by this chat.",
+      "selected_worker_count": {
+        "current_task": "0–3 delegated workers, with the exact justified total selected after examining the actual task and before dispatch.",
+        "next_ordinary_task": "Unknown until scoped; zero if small and linear.",
+        "ordinary_leaf_child_launches": 0,
+        "unrelated_new_chat_relay_launches": 0
+      },
+      "count_semantics": "For the current task, this decision interprets 'до трёх агентов' as a ceiling of three delegated workers. The snapshot itself does not define whether the coordinator counts; if it does, the delegated ceiling is two. No exact staffing is derivable because the task's actual workstreams are absent. The current numeric ceiling does not automatically become a chat-wide ceiling.",
+      "priorities_and_scope": "The explicit maximum-effort request overrides the earlier economical preference for this task. The later ordinary task returns to the chat's economical preference. A leaf receives the effort requirements relevant to its packet, but cannot independently orchestrate. Neither preference nor Auto should be claimed to persist in an unrelated chat.",
+      "next_action": "Scope the current objective, select the exact justified allocation within its ceiling, and put relevant effort instructions into worker packets. Preserve the earlier chat preference for subsequent tasks.",
+      "permission_needed": "No permission for ordinary authorized work. Clarification is only needed if the unresolved coordinator-count convention would affect dispatch.",
+      "user_facing_receipt": "Эту задачу разберём максимально глубоко в пределах трёх агентов. После неё вернёмся к экономному режиму этого чата. Auto остаётся здесь; в другие чаты и дочерние задачи он не переносится.",
+      "rationale": "The router recognizes chat-scoped preferences, current-task routing, and non-transfer of Auto. Authority remains with the user's instructions. However, the old snapshot defines no effort-profile storage, precedence table, or effort inheritance mechanism: the effort distinction follows the explicit scopes of these user statements, not a dedicated policy feature."
+    },
+    {
+      "id": "speed_depth_device",
+      "activation_mode": "Fresh Lite one-shot, provided inspection establishes exclusive, permitted writer ownership. Promote before dispatch if ownership or control is uncertain.",
+      "selected_worker_count": 3,
+      "count_semantics": "Three worker handles: one exclusive writer and two read-only evidence workers; coordinator separate. Freeze this exact total before dispatch.",
+      "priorities_and_scope": "Run the two independent evidence checks alongside the sole writer. Give the writer exclusive access to the shared device/build lane and serialize operations using that lane. Preserve focused verification despite urgency and a two-line final answer.",
+      "next_action": "Inspect current changes and record writer ownership. Dispatch the three bounded roles. After the writer finishes, audit its changes and run permitted focused checks; reviews of its actual result must occur only after that audit.",
+      "permission_needed": "No for already permitted local tests. Relay does not itself authorize additional device actions; obtain authorization only if an otherwise unauthorized action becomes necessary.",
+      "user_facing_receipt": "Один исполнитель займёт общую сборочную линию, два аналитика параллельно проверят независимые данные; делегирование увеличит расход токенов.\nПосле проверки изменений дам итог в две строки: результат и подтверждение с оставшимися ограничениями.",
+      "rationale": "The router expressly permits Lite for one clean exclusive writer plus read-only workers. Lite steps 3 and 6 require ownership inspection, artifact audit, and correctly ordered review. The authority paragraph forbids inferring device permissions. A short response does not waive verification."
+    },
+    {
+      "id": "negation_and_go_ahead",
+      "activation_mode": "Both messages remain within Auto's bounded, local estimate-only work; no Full or live signal is established.",
+      "selected_worker_count": {
+        "first_message": 0,
+        "later_message": 0
+      },
+      "count_semantics": "The quoted and explicitly rejected twenty is neither a staffing target nor a ceiling. The later 'Жги' does not establish a new numerical allocation.",
+      "priorities_and_scope": "First produce only a small scope estimate. Later execute the existing estimate-only plan. Do not infer implementation, a broad audit, or twenty launches from the colloquial go-ahead.",
+      "next_action": "Continue the agreed estimate locally and finish that bounded result.",
+      "permission_needed": "No.",
+      "user_facing_receipt": {
+        "first_message": "Прикину объём локально, без запуска агентов.",
+        "later_message": "Приступаю к согласованной оценке объёма; сделаю её локально."
+      },
+      "rationale": "Natural-language intent is primary, quoted mentions do not independently activate Relay, and small linear work stays local. Auto already supplies activation, but does not expand scope. The snapshot contains no special 'Жги' effort or dispatch command, so the phrase must be read against the existing estimate-only objective."
+    },
+    {
+      "id": "explicit_exact_accounting",
+      "activation_mode": "Retain the current execution mode; no new activation or Full promotion is warranted solely by this additional check.",
+      "selected_worker_count": 2,
+      "count_semantics": "Exactly two successfully created worker handles total, explicitly excluding the coordinator. One completed plus one active still equals two; completion does not restore creation allowance.",
+      "priorities_and_scope": "Complete the useful third check without violating the explicit cumulative handle limit.",
+      "next_action": "Perform the check locally, reuse a completed handle if the native tool supports it, or queue it for the active worker. If a genuinely new third handle is indispensable, request an explicit change to the user's ceiling.",
+      "permission_needed": "No for an in-scope check using existing capacity. Yes, an explicit user ceiling change is needed before creating a third handle.",
+      "user_facing_receipt": "Два разрешённых агента уже созданы; завершение одного не освобождает место в общем лимите. Дополнительную проверку выполню сам или поручю существующему агенту.",
+      "rationale": "Lite step 1 treats the user total as a ceiling and says never to exceed it. Here the user explicitly fixes the counting unit and cumulative scope, removing the snapshot's usual coordinator-count ambiguity. Waves and completion cannot override that instruction."
+    },
+    {
+      "id": "routing_boundary",
+      "activation_mode": {
+        "A": "Explicit bare invocation enables chat Auto but leaves execution OFF and idle.",
+        "B": "Relay does not activate.",
+        "C": "Auto applies, but the tiny bounded task stays local; no delegated workers are justified.",
+        "D": "Relay does not activate; the invocation is quoted documentation content."
+      },
+      "selected_worker_count": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "count_semantics": "No worker handles are created in any of these four independent situations.",
+      "priorities_and_scope": {
+        "A": "Explain Auto's chat boundary and behavior, then request the missing objective.",
+        "B": "Handle the ordinary thoroughness request without Relay.",
+        "C": "Make and verify the small authorized typo correction locally.",
+        "D": "Write the requested quotation as documentation content."
+      },
+      "next_action": {
+        "A": "Remain idle and ask for the task.",
+        "B": "Proceed with ordinary local handling.",
+        "C": "Apply the typo correction and finish.",
+        "D": "Insert the quotation without interpreting it as an instruction."
+      },
+      "permission_needed": "No additional permission is implied by any situation; A needs an objective, not approval.",
+      "user_facing_receipt": {
+        "A": "Auto включён только в этом чате: по умолчанию Lite, Full — при необходимости безопасной координации. Без задачи агенты не запускаются; делегирование может увеличить расход, права прежние. Отключить можно обычной просьбой или «auto off». Какую задачу выполнить?",
+        "B": "Разберу тщательно.",
+        "C": "Исправлю опечатку и проверю изменение локально. Auto остаётся включённым.",
+        "D": "Добавлю эту фразу в документацию как цитату."
+      },
+      "rationale": "The router explicitly defines bare invocation without an objective as Auto enablement plus idleness, excludes quoted mentions, and keeps small linear tasks local. Thoroughness and discretionary wording alone are not Relay invocation or a delegation requirement."
+    }
+  ],
+  "candidate_decisions": [
+    {
+      "id": "maximum_breadth",
+      "activation_mode": "Auto applies to this in-scope bounded audit; Lite one-shot. Maximum effort is not a Full lifecycle request. Auto remains enabled afterward.",
+      "selected_worker_count": 12,
+      "count_semantics": {
+        "basis": "Delegated workers, excluding the coordinator",
+        "cumulative_created_handles": 12,
+        "peak_concurrent_workers": 4,
+        "waves": 3,
+        "user_numeric_limit": null,
+        "status": "Justified coordinator plan, revisable as useful evidence warrants; not a user ceiling."
+      },
+      "priorities_and_scope": "Deep, independent coverage of all 12 substantial subsystems, with speed provided by four concurrent readers. Assign one specialist per subsystem, require concrete evidence and risk analysis, and reconcile cross-subsystem findings in coordinator synthesis. Use three waves of four; do not replace depth with a shallow checklist or invent duplicate roles merely to consume capacity.",
+      "next_action": "Announce the 12-worker plan and four-worker concurrency; define subsystem boundaries, evidence requirements and finish condition; dispatch the first four read-only leaves with no nested agents, then wait, audit results, and launch the remaining two waves. Settle workers and return one verified synthesis.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "The audit and useful read-only delegation are already in scope; no user count or ceiling needs changing."
+      },
+      "user_facing_receipt": "Проведу глубокий аудит всех 12 подсистем: 12 независимых специалистов, по четыре одновременно в три волны; координатор в число не входит. Каждый проверит доказательства и риски своей подсистемы, затем я сведу результаты. Делегирование увеличивает расход токенов. Auto останется включённым.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "Maximum effort with ample budget must materially increase useful coverage, depth, or parallel work; consider large teams and capacity waves without habitual two/three-agent caps.",
+          "application": "Twelve substantial independent evidence sets justify twelve bounded specialist assignments, while native capacity constrains concurrency to four."
+        },
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router",
+          "policy": "Bounded objectives route Lite; delegate when distinct workstreams add material value; effort is not a Full lifecycle request.",
+          "application": "The audit is read-only, independently partitionable and bounded, with no supplied Full promotion condition."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Keep Bounds And Accounting Distinct",
+          "policy": "Separate peak concurrency from cumulative count; count distinct successfully created handles once.",
+          "application": "Twelve total handles and four concurrent workers are different quantities; three waves do not change the total."
+        }
+      ]
+    },
+    {
+      "id": "user_ceiling_not_target",
+      "activation_mode": "Auto applies; bounded read-only comparison routes Lite one-shot; Auto remains enabled afterward.",
+      "selected_worker_count": 2,
+      "count_semantics": {
+        "basis": "Delegated workers, excluding the coordinator",
+        "selected_cumulative_handles": 2,
+        "user_cumulative_ceiling": 4,
+        "user_exact_target": null,
+        "remaining_creation_allowance": 2
+      },
+      "priorities_and_scope": "Thoroughly examine the two independent reports with one reader per report, then compare evidence, assumptions, disagreements and conclusions in coordinator synthesis. Extra duplicate readers add no material value here.",
+      "next_action": "Announce two read-only roles under the four-worker ceiling; dispatch both with evidence-based deliverables; audit and reconcile their results, settle them, and return the comparison.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "Two workers satisfy the existing up-to-four ceiling; unused allowance does not require approval or explanation as a shortfall."
+      },
+      "user_facing_receipt": "Два специалиста независимо проверят по одному отчёту, а я сопоставлю выводы. Это два делегированных работника без координатора при лимите до четырёх; дополнительные читатели здесь пользы не добавят. Делегирование увеличивает расход токенов. Auto останется включённым.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "“Up to N” is only a ceiling; counts default to delegated workers excluding coordinator.",
+          "application": "“До четырёх агентов” permits two and does not request an exact team of four."
+        },
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router; Anti-Patterns",
+          "policy": "Delegate when distinct workstreams add material value; do not fill slots without meaningful work.",
+          "application": "The two report roles cover all useful delegated work; synthesis belongs to the coordinator."
+        }
+      ]
+    },
+    {
+      "id": "coordinator_plan_revision",
+      "activation_mode": "Continue the existing healthy Lite one-shot; no Full promotion for allocation-only revision within the same objective.",
+      "selected_worker_count": 3,
+      "count_semantics": {
+        "basis": "Delegated workers, excluding the coordinator",
+        "previous_successfully_created_handles": 2,
+        "additional_handles": 1,
+        "new_cumulative_total": 3,
+        "peak_concurrent_workers": 3,
+        "user_numeric_limit": null,
+        "previous_count_status": "Coordinator plan, not a hard ceiling."
+      },
+      "priorities_and_scope": "Keep both useful busy readers on their existing assignments; give the new independent source to a third read-only specialist. Preserve the agreed objective and all existing ownership and verification requirements.",
+      "next_action": "Announce the changed count, the new specialist role and the evidence that justifies it, then create one additional bounded read-only leaf. Continue the normal Lite wait, audit and settlement sequence.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "The original count was the coordinator’s plan; same-objective allocation changes need neither a new user grant nor Full solely for count."
+      },
+      "user_facing_receipt": "Первые два специалиста продолжают работу. В рамках того же аудита обнаружился третий независимый источник, поэтому добавляю профильного читателя: теперь три работника без координатора. Это увеличит расход токенов; режим Lite сохраняется.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Process: Lite One-Shot Loop, step 1",
+          "policy": "A coordinator plan is revisable within the same objective: announce changed count, roles and reason without permission or promotion solely for count.",
+          "application": "The third source is within the accepted audit, capacity exists, and there is no user cap."
+        },
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "Allocation-only changes need no Full promotion; redirect future work while preserving valid active writers.",
+          "application": "All workers are read-only and existing work remains useful, so no lifecycle or ownership condition changes."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Allocate Adaptively",
+          "policy": "The example of two delegated reviewers discovering an independent risk permits adding a third reviewer in Lite.",
+          "application": "The supplied situation directly matches that example."
+        }
+      ]
+    },
+    {
+      "id": "preference_scope",
+      "activation_mode": {
+        "current_task": "Auto is enabled; route the actual objective normally. Maximum effort alone does not select Full. No dispatch is requested by this explanatory case.",
+        "next_ordinary_bounded_task": "A fresh Auto-routed task, normally Lite when meaningful delegation exists; keep small linear work local.",
+        "ordinary_leaf": "No inherited Relay activation; leaf-only assignment.",
+        "unrelated_new_chat": "No inherited Auto or Relay activation."
+      },
+      "selected_worker_count": {
+        "current_task": {
+          "min": 0,
+          "max": 3,
+          "reason": "Three is a ceiling, and the objective/workstreams are not supplied; exact useful staffing is intrinsically unknown."
+        },
+        "next_task": {
+          "status": "unknown",
+          "reason": "Choose useful staffing from that task under the retained economical preference; the current-task three-worker ceiling is not inherited."
+        },
+        "ordinary_leaf_additional_workers": 0,
+        "new_chat_workers_due_to_this_preference": 0,
+        "actual_launches_in_this_explanatory_case": 0
+      },
+      "count_semantics": "For the current task, at most three cumulative successfully created delegated worker handles excluding the coordinator; not an exact target, and maximum effort cannot exceed it. Reuse adds no handles. The chat’s economical effort default is retained separately from this task-only cap and override.",
+      "priorities_and_scope": {
+        "current_task": "Maximize useful depth, coverage and verification within the three-worker cumulative ceiling. Reuse handles or do coordinator work when useful. Do not invent roles just to reach three.",
+        "next_ordinary_bounded_task": "Restore the economical chat default, narrow optional investigation appropriately, and still perform required acceptance checks. Select staffing afresh.",
+        "ordinary_leaf": "Provide only bounded effort instructions needed for its assigned deliverable; prohibit nested agents and orchestration skills. Do not transmit chat Auto or effort defaults as inherited authority.",
+        "unrelated_new_chat": "No retained preference or Auto claim from this chat. New authorization/context is needed to establish them there."
+      },
+      "next_action": "Explain these scopes without launching workers. Retain the economical chat default only in host-preserved chat context; apply maximum effort and the three-worker ceiling only to the current task.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "This is a requested explanation. Existing allowed work needs no new grant; any additional newly created current-task handle beyond three would require a user change to the ceiling."
+      },
+      "user_facing_receipt": "Для этой задачи применю максимум полезной глубины в пределах трёх делегированных работников, без координатора; точное число зависит от работы. Затем вернёмся к экономному режиму этого чата, сохранив обязательные проверки. Auto и общие предпочтения не переходят к обычному исполнителю или в новый чат. Сейчас никого не запускаю; Auto здесь остаётся включённым.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "Effort applies to this task unless explicit future-use wording retains a chat default; task overrides do not erase it. Maximum effort never overrides a numeric cap.",
+          "application": "“В этом чате” establishes economy as the retained default; “эту задачу” overrides only the current task, whose maximum is three workers."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Scope And Mid-Run Steering",
+          "policy": "Never implicitly transfer chat defaults or Relay activation to a child or new chat; pass only bounded task-relevant effort instructions to leaves.",
+          "application": "The leaf remains a leaf and the unrelated chat does not inherit either preference or activation."
+        },
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router; Effort And Allocation",
+          "policy": "Auto is chat-scoped and creates no agents between tasks; keep small linear work local; required project checks are not waived by effort preferences.",
+          "application": "The next task is newly routed, no background team is retained, and economy does not remove required verification."
+        }
+      ]
+    },
+    {
+      "id": "speed_depth_device",
+      "activation_mode": "Auto applies; Lite one-shot with one clean exclusive writer and two read-only workers, subject to the required pre-dispatch ownership inspection. Urgency, thoroughness and two-line output do not select Full.",
+      "selected_worker_count": 3,
+      "count_semantics": {
+        "basis": "Delegated workers, excluding the coordinator",
+        "roles": {
+          "exclusive_writer": 1,
+          "read_only_evidence_checks": 2
+        },
+        "cumulative_planned_handles": 3,
+        "concurrency": "Up to three workers if native model capacity permits; the device/build lane remains serialized.",
+        "user_numeric_limit": null
+      },
+      "priorities_and_scope": "Prioritize the urgent critical path while performing both independent evidence checks alongside the sole writer. Reserve shared device/build access to one coordinated lane; readers do not compete for it. Perform required project checks and focused verification of risky paths. Keep the final response to two lines without shrinking investigation to two lines of effort.",
+      "next_action": "Inspect existing changes and confirm a clean exclusive owned path set before dispatch. Announce one writer plus two readers, assign the writer’s paths, run the readers’ independent checks alongside writing, then audit the terminal writer and verify through the shared lane. If ownership is dirty, overlapping or uncertain, promote before affected work; absent such evidence, remain Lite.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "Ordinary permitted local tests and the accepted task are already authorized; urgency or delegation changes no permission boundaries."
+      },
+      "user_facing_receipt": "Один исполнитель ведёт изменения и общую линию сборки/устройства, два читателя параллельно проверяют независимые данные: три работника без координатора; делегирование увеличивает расход токенов.\nПроверю тщательно, включая обязательные тесты; итог дам в две строки. Auto останется включённым.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router",
+          "policy": "One clean exclusive writer plus read-only workers is Lite; multiple writers or unclear ownership promote to Full before conflicting work.",
+          "application": "The supplied role structure supports Lite after confirming ownership, without making the shared build lane a reason for broader orchestration."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Allocate Adaptively",
+          "policy": "Model-worker slots, a shared writer, build throughput and a single device are different resources; serial building does not preclude independent read-only investigation. Review a writer’s result only after terminal and audited.",
+          "application": "Serialize device/build actions while running both independent evidence checks in parallel with the writer."
+        },
+        {
+          "source": "SKILL.md — Effort And Allocation; references/effort-and-sizing.md — Interpret The Work, Not Keywords",
+          "policy": "Brief output need not mean shallow work; urgency differs from a rough estimate; required project verification remains mandatory.",
+          "application": "Deliver a concise two-line answer backed by thorough critical-path investigation and normal acceptance checks."
+        }
+      ]
+    },
+    {
+      "id": "negation_and_go_ahead",
+      "activation_mode": {
+        "first_message": "Auto is already enabled; handle the small provisional estimate locally, with no delegated work justified.",
+        "later_message": "Continue the same authorized estimate-only plan locally; colloquial “Жги” neither activates a new mode nor raises effort or scope."
+      },
+      "selected_worker_count": 0,
+      "count_semantics": "No delegated handles are warranted by the small linear estimate. The quoted and expressly rejected “twenty” is neither an exact count nor a ceiling. The later go-ahead supplies no numeric instruction.",
+      "priorities_and_scope": "Give only a provisional scope estimate with bounded precision and estimate-appropriate checks. Do not perform the full task, expand into deep audit, adopt maximum effort, or create twenty workers. The later message authorizes proceeding with the agreed estimate-only plan.",
+      "next_action": "Produce the small estimate or continue its already agreed steps; keep Auto available for future in-scope tasks without starting background agents.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "The small estimate is explicitly authorized, including the later go-ahead; there is no requested permission expansion."
+      },
+      "user_facing_receipt": "Пока подготовлю только предварительную оценку объёма, без запуска работников. «Жги» после этого плана означает продолжить ту же оценку; максимум усилий и двадцать агентов не запрошены. Auto остаётся включённым.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "Quotes, negation and colloquial go-ahead alone imply neither maximum effort nor activation.",
+          "application": "The colleague’s maximum/twenty instruction is reported and rejected; the later single-word go-ahead adopts the existing estimate-only plan."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Interpret The Work, Not Keywords",
+          "policy": "“Just a rough estimate” bounds precision and verification; “Жги” after an estimate-only plan continues that authorized estimate without maximum budget or expanded scope.",
+          "application": "Both messages remain provisional estimation with no justified delegation."
+        },
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router",
+          "policy": "Keep small linear work local; Auto creates no agents between tasks.",
+          "application": "Auto being enabled does not compel launching a worker for the small estimate."
+        }
+      ]
+    },
+    {
+      "id": "explicit_exact_accounting",
+      "activation_mode": "Preserve the already-running task’s execution mode. The prompt does not supply Auto, Lite or Full state, and allocation/accounting alone is not a new activation or promotion signal.",
+      "selected_worker_count": 2,
+      "count_semantics": {
+        "basis": "Worker handles excluding coordinator, explicitly specified by the user",
+        "exact_target": 2,
+        "cumulative_hard_ceiling": 2,
+        "successfully_created_handles_so_far": 2,
+        "completed_handles_still_counted": 1,
+        "active_handles": 1,
+        "remaining_new_handle_allowance": 0,
+        "completion_frees_allowance": false
+      },
+      "priorities_and_scope": "Cover the newly discovered useful check without a third handle when possible: reuse the completed worker if the host permits reuse, give the active worker a later compatible assignment after preserving its valid current work, or perform the check in the coordinator. Preserve scope and existing verification requirements.",
+      "next_action": "Do not spawn a third handle. Prefer a suitable existing handle or coordinator work and state the unchanged cumulative count. If the check truly requires a fresh handle, explain that it is blocked by the exact-two ceiling and request a user change before creating it; do not treat completion, closure or a new wave as freed allowance.",
+      "permission_needed": {
+        "needed": false,
+        "reason": "Reusing existing handles or doing authorized coordinator work does not need new permission.",
+        "conditional": "A third distinct successfully created handle requires the user to change the exact-two ceiling first."
+      },
+      "user_facing_receipt": "Лимит ровно два работника уже полностью использован: завершённый исполнитель тоже учитывается. Третьего не запускаю; дополнительную проверку поручим существующему исполнителю или выполню сам. Для нового третьего работника сначала потребуется изменить ваш лимит.",
+      "rationale": [
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "User EXACT N is both target and cumulative hard ceiling; count successfully created handles including later failures/cancellations; reuse adds none and completion/closing never resets totals.",
+          "application": "The two successful creations satisfy the target and exhaust the ceiling even though only one remains active."
+        },
+        {
+          "source": "references/effort-and-sizing.md — Keep Bounds And Accounting Distinct",
+          "policy": "Completed and closed handles count; a replacement adds one; use existing handles or permitted coordinator work; another new handle requires a user change to the cap.",
+          "application": "All compatible reuse options remain available, but a third independent handle does not."
+        },
+        {
+          "source": "SKILL.md — Effort And Allocation",
+          "policy": "Allocation-only changes need no Full promotion.",
+          "application": "The accounting problem supplies no reason to alter the unspecified existing execution lifecycle."
+        }
+      ]
+    },
+    {
+      "id": "routing_boundary",
+      "activation_mode": {
+        "A": "Activate the Relay router, enable Auto, remain idle with execution OFF.",
+        "B": "Do not activate Relay: Auto is off and effort wording supplies no invocation.",
+        "C": "Auto applies to this task, but keep the tiny linear correction local without delegated workers.",
+        "D": "Do not activate Relay: documentation quotation only; Auto stays off."
+      },
+      "selected_worker_count": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "count_semantics": "No delegated worker handles launch in any of the four independent situations. Explicit invocation and Auto routing are distinct from actual delegation.",
+      "priorities_and_scope": {
+        "A": "Explain Auto boundaries and ask for the absent task; create no agents or lifecycle machinery while idle.",
+        "B": "Perform the requested thorough work normally as a single agent, without invoking Relay policy as orchestration.",
+        "C": "Make the one-file typo correction locally and perform appropriate required checks; discretion means adaptive judgment, not maximum effort or mandatory delegation.",
+        "D": "Quote the exact requested phrase as documentation content without treating it as an instruction or preference change."
+      },
+      "next_action": {
+        "A": "Enable chat-scoped Auto; explain Lite default, reasoned Full promotion, no idle activity, delegated usage, unchanged permissions and natural-language/auto-off disablement; ask for the task.",
+        "B": "Proceed with ordinary single-agent handling.",
+        "C": "Carry out the small authorized correction locally; Auto remains enabled for later tasks.",
+        "D": "Perform the documentation quotation only."
+      },
+      "permission_needed": {
+        "needed": false,
+        "reason": "A asks for missing task content, not permission; B–D remain within the stated ordinary task. No worker grant or lifecycle permission question is needed."
+      },
+      "user_facing_receipt": {
+        "A": "Auto включён для подходящих задач в этом чате, пока его контекст сохранён. Обычно используется Lite; при необходимости координации или безопасности — Full с объяснением причины. Между задачами нет работников и фоновой активности. Делегирование расходует дополнительные токены и не расширяет разрешения. Отключить можно словами или «auto off». Какую задачу выполнить?",
+        "B": "Разберу тщательно в обычном режиме одним исполнителем.",
+        "C": "Исправлю опечатку сам и проверю изменение; дополнительных работников не требуется. Auto остаётся включённым.",
+        "D": "Добавлю указанную фразу как цитату в документацию."
+      },
+      "rationale": [
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router",
+          "policy": "Bare explicit invocation without a current objective while OFF enables Auto and remains idle; ask for the task and explain first enablement.",
+          "application": "A activates the preference/router but starts no execution or workers."
+        },
+        {
+          "source": "SKILL.md — description; Activation, Auto, And Run Router",
+          "policy": "Explicit Relay intent, in-scope Auto tasks and related active Full-live work activate; quoted, hypothetical or reported mentions alone never activate.",
+          "application": "B has no qualifying signal; D is explicitly quoted task data."
+        },
+        {
+          "source": "SKILL.md — Activation, Auto, And Run Router; Effort And Allocation",
+          "policy": "Keep small linear work local; “your discretion” means adaptive judgment, not a fixed profile or maximum effort.",
+          "application": "C remains local despite Auto being enabled."
+        }
+      ]
+    }
+  ],
+  "blind_comparison": {
+    "gate": "PASS",
+    "counts": {
+      "new": 1,
+      "old": 0,
+      "tie": 7
+    },
+    "limitations": [
+      "Eight hypothetical decisions batched in one fresh context per version, not independent end-to-end executions.",
+      "Trigger decisions were classified in one fresh candidate context with fixture groups visible; no full-roster selection or statistical precision estimate.",
+      "No workload latency, quality, or token-cost benchmark."
+    ],
+    "judgments": [
+      {
+        "id": "maximum_breadth",
+        "winner": "tie",
+        "reason": "Both allocate all four concurrent slots to deep coverage of all twelve subsystems. Twelve specialists in waves and four reused specialists are both reasonable; the case supplies no evidence that either allocation delivers better results.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "user_ceiling_not_target",
+        "winner": "tie",
+        "reason": "Both select the two useful readers, retain coordinator synthesis, and treat four as a ceiling. Both distinguish workers from the coordinator and avoid a needless question; B's counting caveat does not change its compliant allocation.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "coordinator_plan_revision",
+        "winner": "A",
+        "reason": "A adds the justified third specialist within the same objective, explains the revision, and correctly requires neither permission nor Full promotion. B incorrectly turns the coordinator's initial plan into a binding ceiling.",
+        "defects_A": [],
+        "defects_B": [
+          "Refuses a permitted third handle solely because the coordinator previously announced two, despite no user ceiling and available capacity.",
+          "Suggests an explicit user change could be required to revise that self-selected count, contrary to the supplied criterion."
+        ]
+      },
+      {
+        "id": "preference_scope",
+        "winner": "tie",
+        "reason": "Both apply maximum effort to the current task within a stated three-worker ceiling, restore chat economy afterward, and prevent inherited Relay activation in leaves or new chats. Both allow bounded leaf instructions and launch nothing. B's conditional counting discussion does not alter its selected zero-to-three allocation.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "speed_depth_device",
+        "winner": "tie",
+        "reason": "Both run two independent readers beside one exclusive writer, serialize the shared build/device lane, preserve permitted verification without extra confirmation, and keep the final response to two lines without reducing investigative depth.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "negation_and_go_ahead",
+        "winner": "tie",
+        "reason": "Both reject the quoted twenty-agent instruction and interpret the later go-ahead as continuing the small local estimate. Neither expands into implementation, a broad audit, or maximum staffing.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "explicit_exact_accounting",
+        "winner": "tie",
+        "reason": "Both count completed handles against the explicit cumulative total of two, offer reuse, local work, or queuing, and require a user ceiling change before creating a third handle.",
+        "defects_A": [],
+        "defects_B": []
+      },
+      {
+        "id": "routing_boundary",
+        "winner": "tie",
+        "reason": "Both give the required routing in every situation: bare invocation enables idle Auto; thoroughness alone and a documentation quotation do not activate Relay; the tiny correction stays local. All four launch zero workers.",
+        "defects_A": [],
+        "defects_B": []
+      }
+    ],
+    "mapping": {
+      "maximum_breadth": {
+        "A": "new",
+        "B": "old"
+      },
+      "user_ceiling_not_target": {
+        "A": "new",
+        "B": "old"
+      },
+      "coordinator_plan_revision": {
+        "A": "new",
+        "B": "old"
+      },
+      "preference_scope": {
+        "A": "new",
+        "B": "old"
+      },
+      "speed_depth_device": {
+        "A": "new",
+        "B": "old"
+      },
+      "negation_and_go_ahead": {
+        "A": "new",
+        "B": "old"
+      },
+      "explicit_exact_accounting": {
+        "A": "new",
+        "B": "old"
+      },
+      "routing_boundary": {
+        "A": "old",
+        "B": "new"
+      }
+    }
+  },
+  "trigger_decisions": [
+    {
+      "id": "positive_01",
+      "source_group": "positive",
+      "query": "Explicitly invoke $relay-orchestra with no task yet.",
+      "classification": "activate",
+      "reason": "An explicit bare invocation activates the router and enables Auto while idle; no task means no worker launch."
+    },
+    {
+      "id": "positive_02",
+      "source_group": "positive",
+      "query": "$relay-orchestra Use this for suitable work from now on in this chat. I do not have a concrete task yet.",
+      "classification": "activate",
+      "reason": "Explicit future-use intent in this chat enables scoped Auto; absence of an objective leaves it idle."
+    },
+    {
+      "id": "positive_03",
+      "source_group": "positive",
+      "query": "Use Relay Orchestra for later tasks in this chat, starting with a bounded review of the current diff.",
+      "classification": "activate",
+      "reason": "Explicit current Relay use plus future-use intent activates the bounded review and enables Auto for later suitable work."
+    },
+    {
+      "id": "positive_04",
+      "source_group": "positive",
+      "query": "Keep using Relay Orchestra when later suitable tasks come up here.",
+      "classification": "activate",
+      "reason": "Explicit future-use Relay intent enables Auto for suitable later work in this chat."
+    },
+    {
+      "id": "positive_05",
+      "source_group": "positive",
+      "query": "Use Relay Orchestra automatically for code reviews only, never implementation.",
+      "classification": "activate",
+      "reason": "Explicit scoped future-use intent enables Auto for code reviews only; implementation is excluded."
+    },
+    {
+      "id": "positive_06",
+      "source_group": "positive",
+      "query": "Use Relay Orchestra to have two read-only researchers compare these bounded API docs and synthesize a recommendation with citations.",
+      "classification": "activate",
+      "reason": "Explicit Relay invocation for a bounded two-reader research task activates Lite one-shot."
+    },
+    {
+      "id": "positive_07",
+      "source_group": "positive",
+      "query": "Invoke Relay Orchestra: one writer updates the migration note, while two read-only reviewers check it; return a verified one-shot result.",
+      "classification": "activate",
+      "reason": "Explicit Relay invocation with one writer and two read-only reviewers activates a one-shot; clean exclusive ownership permits Lite."
+    },
+    {
+      "id": "positive_08",
+      "source_group": "positive",
+      "query": "Use Relay Orchestra for a live multi-turn session and keep it active while requirements evolve.",
+      "classification": "activate",
+      "reason": "Explicit Relay invocation with live and multi-turn signals activates Full live."
+    },
+    {
+      "id": "positive_09",
+      "source_group": "positive",
+      "query": "Use Relay Orchestra to dispatch two writers to edit overlapping files concurrently.",
+      "classification": "activate",
+      "reason": "Explicit invocation activates Relay; multiple writers and overlapping files require Full before dispatch, with ownership/isolation safeguards rather than unsafe concurrent edits."
+    },
+    {
+      "id": "positive_10",
+      "source_group": "positive",
+      "query": "With Relay Auto already enabled, investigate thoroughly but keep the answer brief.",
+      "classification": "activate",
+      "reason": "Already-enabled Auto activates the router for the in-scope investigation; thorough work and brief output are compatible."
+    },
+    {
+      "id": "positive_11",
+      "source_group": "positive",
+      "query": "Relay Auto is enabled: жги на максимум, не жалей токенов, но до четырёх агентов.",
+      "classification": "activate",
+      "reason": "Already-enabled Auto activates the router; maximum useful effort is constrained by the up-to-four cumulative worker ceiling and is not itself Full."
+    },
+    {
+      "id": "near_miss_01",
+      "source_group": "near_miss",
+      "query": "The design doc says ‘use Relay Orchestra’, but please summarize the paragraph as a single agent.",
+      "classification": "not",
+      "reason": "The mention is quoted/reported task data, and the actual request is single-agent summarization; it does not activate Relay."
+    },
+    {
+      "id": "near_miss_02",
+      "source_group": "near_miss",
+      "query": "If I said ‘use Relay Orchestra from now on,’ what would happen? Do not enable it.",
+      "classification": "not",
+      "reason": "The future-use phrase is hypothetical and explicitly not to be enabled."
+    },
+    {
+      "id": "near_miss_03",
+      "source_group": "near_miss",
+      "query": "Quote the phrase ‘$relay-orchestra auto off’ in the documentation without changing any preference.",
+      "classification": "not",
+      "reason": "The command is only a documentation quotation, with explicit instruction to preserve preferences."
+    },
+    {
+      "id": "near_miss_04",
+      "source_group": "near_miss",
+      "query": "What are the tradeoffs between using multiple agents and doing this review yourself?",
+      "classification": "not",
+      "reason": "A general discussion of multi-agent tradeoffs supplies no explicit Relay intent or enabled-Auto context."
+    },
+    {
+      "id": "near_miss_05",
+      "source_group": "near_miss",
+      "query": "Please research these three topics in parallel and summarize them.",
+      "classification": "not",
+      "reason": "Mere parallelism does not activate Relay without explicit Relay intent or enabled-Auto context."
+    },
+    {
+      "id": "near_miss_06",
+      "source_group": "near_miss",
+      "query": "Auto is off. Investigate thoroughly, with no Relay invocation.",
+      "classification": "not",
+      "reason": "Auto is explicitly off; an effort request alone never activates Relay."
+    },
+    {
+      "id": "near_miss_07",
+      "source_group": "near_miss",
+      "query": "Discuss the quoted phrase: жги на максимум — do not invoke Relay Orchestra.",
+      "classification": "not",
+      "reason": "The phrase is quoted discussion data and Relay invocation is explicitly rejected."
+    },
+    {
+      "id": "holdout_01",
+      "source_group": "holdout",
+      "query": "Explicitly invoke Relay Orchestra to audit this bounded migration with parallel read-only agents and one final synthesis.",
+      "classification": "activate",
+      "reason": "Explicit Relay invocation for a bounded read-only audit activates Lite one-shot and useful delegation."
+    },
+    {
+      "id": "holdout_02",
+      "source_group": "holdout",
+      "query": "Use Relay Orchestra for this review and continue applying it to appropriate work later in this chat.",
+      "classification": "activate",
+      "reason": "Explicit Relay use for the current review plus later suitable tasks activates the review and enables chat-scoped Auto."
+    }
+  ],
+  "mechanical_checks": {
+    "project_validator": "PASS",
+    "unit_tests": {
+      "passed": 140,
+      "failed": 0
+    },
+    "skillforge_structure": "PASS (info-only absence of body Triggers section)",
+    "skillforge_docs_safety": "PASS",
+    "skillforge_static_evals": {
+      "passed": 35,
+      "failed": 0
+    },
+    "skill_body_words": 1487,
+    "git_diff_check": "PASS"
+  },
+  "installation": "Repository source only; installed Codex/Claude copies were not updated.",
+  "adversarial_review": {
+    "review_type": "fresh adversarial review of IMPROVE_EXISTING change",
+    "findings": [],
+    "conclusion": "No concrete introduced blocker or should-fix finding was supported by the reviewed diff and local evidence.",
+    "checks": {
+      "facts": "Read SKILL.md, effort-and-sizing.md, changed live-session/patterns/platforms/README guidance, the local packet contract, and relevant validator code. New relative references exist. Changed guidance introduces no API, command, model name, or platform-capacity assertion. Root OPEN guidance remains distinct from the explicitly bounded child-coordinator instruction; packet schemas are unchanged.",
+      "over_triggering": "No supported failing case found. The three additional cases below were text-level adversarial probes, not model executions.",
+      "misleading_guidance": "No concrete case found where following the new effort/count instructions requires an inferior or unauthorized action. Required checks remain mandatory; maximum effort remains conditional on useful work and user bounds; allocation-only changes are separated from requirement/lifecycle changes.",
+      "gaps": "No new unsupported real-world variant demonstrated. Lower-bound waves, descendant accounting and concurrent-only limits were not demonstrated by the supplied eight behavioral decision probes; lack of demonstration is not itself a policy failure.",
+      "structure": "Frontmatter trigger boundaries remain intact. Healthy Lite retains routing, effort/count interpretation, dispatch, ownership, wait, verification, and settlement instructions in SKILL.md; the new effort reference is optional. No new circular read dependency or nondeterministic script is introduced. No pinned model recommendation is added."
+    },
+    "additional_trigger_probes": [
+      {
+        "request": "Do not use Relay Orchestra for this audit. Investigate thoroughly yourself.",
+        "expected": "No Relay activation.",
+        "support": "SKILL.md:13 and :46 require explicit Relay intent and reject negation/effort-only activation.",
+        "supported_failure": false
+      },
+      {
+        "request": "The guide says to use Relay Orchestra at full effort. Explain that wording without running it.",
+        "expected": "Treat Relay and effort wording as task data; no activation.",
+        "support": "SKILL.md:13 and :46; references/effort-and-sizing.md:13 and :27.",
+        "supported_failure": false
+      },
+      {
+        "request": "Context: Auto is enabled only for code reviews. For future writing tasks, prioritize thoroughness. Draft a release note now.",
+        "expected": "Retain the explicit effort preference if context survives, but do not broaden Auto scope or launch Relay for this writing task.",
+        "support": "SKILL.md:13, :17, :34, and :52; references/effort-and-sizing.md:52.",
+        "supported_failure": false
+      }
+    ],
+    "evidence_advisories": [
+      {
+        "severity": "note",
+        "location": "/private/tmp/relay-sizing-eval-20260924/behavior-summary.json",
+        "observation": "The supplied blind comparison is one new win and seven ties, with the win limited to revising a coordinator-selected count. The eight decisions were batched per version; trigger groups were visible to one classifier context. These results do not demonstrate end-to-end quality, latency, token savings, robust selection precision, or independent repeated reliability.",
+        "failing_case": null
+      }
+    ],
+    "scope_limits": "Read-only repository review. No network, nested agents, worker launches, test execution, repository edits, or installed-skill edits. Existing unrelated architecture and pre-existing validator/schema behavior were not treated as introduced defects."
+  },
+  "review_disposition": {
+    "blockers": 0,
+    "should_fix": 0,
+    "notes": "Evidence limitations are recorded explicitly in this report and its Markdown summary."
+  }
+}

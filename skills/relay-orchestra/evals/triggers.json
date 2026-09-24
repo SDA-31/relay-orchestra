@@ -8,14 +8,18 @@
     "Use Relay Orchestra to have two read-only researchers compare these bounded API docs and synthesize a recommendation with citations.",
     "Invoke Relay Orchestra: one writer updates the migration note, while two read-only reviewers check it; return a verified one-shot result.",
     "Use Relay Orchestra for a live multi-turn session and keep it active while requirements evolve.",
-    "Use Relay Orchestra to dispatch two writers to edit overlapping files concurrently."
+    "Use Relay Orchestra to dispatch two writers to edit overlapping files concurrently.",
+    "With Relay Auto already enabled, investigate thoroughly but keep the answer brief.",
+    "Relay Auto is enabled: жги на максимум, не жалей токенов, но до четырёх агентов."
   ],
   "near_miss": [
     "The design doc says ‘use Relay Orchestra’, but please summarize the paragraph as a single agent.",
     "If I said ‘use Relay Orchestra from now on,’ what would happen? Do not enable it.",
     "Quote the phrase ‘$relay-orchestra auto off’ in the documentation without changing any preference.",
     "What are the tradeoffs between using multiple agents and doing this review yourself?",
-    "Please research these three topics in parallel and summarize them."
+    "Please research these three topics in parallel and summarize them.",
+    "Auto is off. Investigate thoroughly, with no Relay invocation.",
+    "Discuss the quoted phrase: жги на максимум — do not invoke Relay Orchestra."
   ],
   "holdout": [
     "Explicitly invoke Relay Orchestra to audit this bounded migration with parallel read-only agents and one final synthesis.",

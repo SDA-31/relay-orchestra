@@ -10,3 +10,7 @@ Keep Relay Orchestra portable, explicit, and small.
 6. Run `python3 scripts/validate.py` and `python3 -m unittest discover -s tests`.
 
 Avoid requiring an external agent CLI, a fixed agent count, nested dispatch, or a proprietary plan format in the portable core.
+
+When changing effort or allocation guidance, preserve the distinction between a revisable coordinator plan and user-imposed numeric bounds. Required project checks remain mandatory at every effort level. Keep task preferences separate from chat defaults, and keep effort separate from activation, lifecycle, and permissions.
+
+Update the public README and prompt examples alongside user-visible behavior. Retain evaluation evidence under `evals/results/`, distinguish decision probes from actual workload measurements, and do not use higher agent counts alone as a success criterion. Local notes and hand-offs belong in the ignored `docs/` directory; public instructions and regression evidence must remain in tracked paths.

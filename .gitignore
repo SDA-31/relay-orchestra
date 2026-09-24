@@ -2,3 +2,6 @@
 __pycache__/
 *.py[cod]
 .venv/
+
+# Local notes and hand-off documents
+/docs/

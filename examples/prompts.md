@@ -13,6 +13,58 @@ concrete task yet.
 
 Both enable an idle chat preference. They do not open a Full live session or launch agents.
 
+## Let Relay Choose The Plan
+
+```text
+$relay-orchestra Review the current changes and verify the important findings.
+```
+
+No effort label or agent count is required. Relay chooses useful roles from the task and context, keeps small linear work local, and may revise its own allocation as evidence develops. This bounded invocation does not enable Auto for later tasks.
+
+## Steer Effort In Ordinary Language
+
+Once Auto is enabled for the relevant work, later requests can be as short as these. Without Auto, explicitly invoke Relay with the task.
+
+| Wording | Intended direction |
+| --- | --- |
+| “Use your judgment.” | Normal adaptive planning; no special effort tier. |
+| “Give this a more thorough pass, without going all-out.” | Increase useful effort relative to the current approach. |
+| “Keep this one lean; focus on the evidence that changes the decision.” | Reduce optional exploration while retaining required checks. |
+| “This is urgent. Investigate thoroughly and give me two lines.” | Prioritize speed and depth; keep the answer short. |
+| “Use maximum effort on this audit; don't economize on tokens.” | Expand useful coverage, depth, verification, or parallel work, including large teams and capacity waves when justified. |
+| “Keep going until the agreed work is finished.” | Persist within the accepted scope and permissions. |
+
+These are examples, not commands or named modes. Equivalent wording in another language works too: “чуть плотнее, но без фанатизма” asks for a relative increase; “жги на максимум, не жалей токенов” signals maximum useful effort. A quoted or negated phrase does not request that behavior. “Жги” after an estimate-only plan means continue that estimate.
+
+Required project checks stay in place at every effort level. Maximum effort does not select the Full lifecycle, grant new permissions, or require filling every available worker slot.
+
+## Set A Chat Default And Override One Task
+
+After enabling Auto:
+
+```text
+For later tasks in this chat, keep the work economical.
+```
+
+Then, for one task:
+
+```text
+For this audit, use maximum effort, but no more than three workers.
+```
+
+The next ordinary task returns to the economical default. The three-worker ceiling applies to this audit. Effort preferences alone do not enable Auto or transfer to another chat or a child task; retention depends on the client preserving the context.
+
+## State Numeric Bounds When They Matter
+
+| Request | Meaning |
+| --- | --- |
+| “Run exactly three workers for this audit.” | Three is both the target and the cumulative ceiling. |
+| “Use up to three workers for this audit.” | Three is a ceiling; fewer may be appropriate. |
+| “Use at least five workers for these independent reviews.” | Five is a floor; use capacity waves if needed. |
+| “Use three agents total, including yourself.” | Allow two delegated workers plus the coordinator. |
+
+Unqualified counts normally mean delegated workers, excluding the coordinator. Completing, closing, cancelling, or replacing a created worker does not replenish a cumulative ceiling; a replacement counts as another handle. Reusing an existing handle adds no count. Relay explains insufficient useful work instead of inventing assignments just to fill an exact target.
+
 ## Run Now And Keep Auto Enabled
 
 ```text

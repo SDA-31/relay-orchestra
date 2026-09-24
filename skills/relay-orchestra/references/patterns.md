@@ -2,6 +2,8 @@
 
 Read this reference when a run has dependencies, concurrent writers, overlapping paths, many requested agents, or a non-trivial integration step.
 
+Size the plan from task needs and contextual effort preferences, not a habitual small-team cap. Maximum effort with ample budget warrants materially more useful depth, coverage, verification, or parallel work when available; it does not require filling capacity. Reuse context and account for coordination costs. A single writer, build, or device is a specific bottleneck, not a reason to suppress independent read-only model work. See optional [effort and sizing examples](effort-and-sizing.md).
+
 ## Decision Matrix
 
 | Question | Decision |
@@ -16,7 +18,7 @@ Read this reference when a run has dependencies, concurrent writers, overlapping
 
 Give every agent the same artifact and intent, but a different lens or partition. Keep lenses read-only. Remove duplicates, reject unsupported claims, and preserve well-evidenced minority findings.
 
-For large counts, partition by module, user journey, risk class, time range, or evidence source. Record every requested slot even when multiple agents use the same broader lens.
+For large counts, partition by module, user journey, risk class, time range, or evidence source. Record every requested slot even when multiple agents use the same broader lens, and give each meaningful distinct work. Explain insufficient scope instead of inventing decorative slots. Deep investigation may benefit more from context reuse than additional lenses.
 
 ## Workstream Fanout
 
@@ -40,6 +42,8 @@ Use waves both for dependencies and client concurrency limits:
 4. Gather and verify the wave.
 5. Pass only confirmed outputs to dependent slots.
 6. Continue until every requested slot is complete, failed, cancelled, or explicitly unstarted.
+
+Waves address capacity and dependencies; they never replenish a user's cumulative handle ceiling. Exact totals remain targets and ceilings, “up to” specifies only a ceiling, and “at least” only a floor. Maximum effort respects all numeric caps. A coordinator-selected plan can grow or shrink within the same objective: announce revised count, roles, and reason, honor all user bounds, and preserve ownership. This alone does not require Full or user approval. Keep actual capacity separate from cumulative created handles; completion or closing does not subtract a handle.
 
 Reject dependency cycles. Do not create a graph for a small cohesive task.
 
@@ -92,6 +96,9 @@ Normalize results into confirmed consensus, meaningful disagreement, verified ev
 ## Anti-Patterns
 
 - A fixed maximum agent count imposed by the skill
+- Treating a coordinator-selected plan as an immutable user ceiling
+- Equating a short answer with shallow work, or maximum effort with unlimited permissions
+- Transferring chat effort preferences or Relay activation implicitly into children
 - Silently reducing the requested total
 - Decorative agents without a lens, partition, or ownership
 - Unrequested nested subagent trees, including any ordinary leaf that spawns agents or activates Relay. A separately delegated child coordinator is valid only when the user explicitly requested Relay for that task and every additional coordination level has its own explicit authorization.

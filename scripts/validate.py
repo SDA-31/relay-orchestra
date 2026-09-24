@@ -764,6 +764,7 @@ def validate_skill_local_evals(eval_dir: Path | None = None) -> None:
         "09-bare-enables-auto.md", "10-bounded-future-use.md",
         "11-later-task-under-auto.md", "12-auto-off-live.md",
         "13-active-full-precedence.md", "14-scoped-auto.md",
+        "15-contextual-effort.md", "16-agent-bounds.md", "17-adaptive-lite-plan.md",
     }
     expected_runs = {
         "01-lite-read-only.md": 3,
@@ -780,6 +781,9 @@ def validate_skill_local_evals(eval_dir: Path | None = None) -> None:
         "12-auto-off-live.md": 3,
         "13-active-full-precedence.md": 3,
         "14-scoped-auto.md": 3,
+        "15-contextual-effort.md": 1,
+        "16-agent-bounds.md": 1,
+        "17-adaptive-lite-plan.md": 1,
     }
     expected_auto_assertions = {
         "09-bare-enables-auto.md": {
@@ -821,7 +825,7 @@ def validate_skill_local_evals(eval_dir: Path | None = None) -> None:
     }
     paths = {path.name: path for path in scenario_dir.glob("*.md")}
     if set(paths) != required_names:
-        fail("skill-local scenarios must contain the required fourteen fixtures")
+        fail("skill-local scenarios must contain the required seventeen fixtures")
     for name, path in paths.items():
         content = path.read_text(encoding="utf-8")
         match = re.match(r"\A---\n(.*?)\n---\n", content, re.DOTALL)
@@ -2485,6 +2489,42 @@ def validate() -> None:
         "fifteen_agents": {"requested_total_15", "no_skill_cap", "account_all"},
         "exact_total_ceiling": {"EXACT_2", "ask_for_count_delta", "no_third_handle"},
         "open_scheduler_addition": {"OPEN_count_mode", "scheduler_may_add"},
+        "effort_maximum_breadth": {
+            "infer_maximum_effort", "substantial_independent_coverage", "reasoned_staffing_not_fixed_count",
+            "capacity_waves_or_context_reuse", "no_skill_cap",
+        },
+        "effort_user_ceiling_not_target": {
+            "upper_bound_not_target", "two_useful_roles", "count_basis_explicit",
+            "no_decorative_workers",
+        },
+        "effort_coordinator_plan_revision": {
+            "coordinator_plan_revisable", "same_objective", "third_useful_worker_allowed",
+            "no_count_approval", "no_full_for_count_only", "updated_count_roles_reason",
+        },
+        "effort_preference_scope": {
+            "task_override", "chat_default_restored", "numeric_cap_preserved",
+            "no_implicit_child_preference", "no_new_chat_preference",
+        },
+        "effort_speed_depth_device": {
+            "urgency_not_shallowness", "independent_readers_parallel", "single_writer_device_build_lane",
+            "ordinary_checks_preserved", "short_answer_only",
+        },
+        "effort_negation_and_go_ahead": {
+            "quoted_maximum_ignored", "negated_maximum_ignored", "estimate_scope_preserved",
+            "go_ahead_not_maximum",
+        },
+        "effort_explicit_exact_accounting": {
+            "explicit_exact_ceiling", "completed_handles_still_count", "reuse_or_local_or_queue",
+            "ask_before_third_handle",
+        },
+        "effort_routing_boundary": {
+            "bare_auto_idle", "effort_alone_not_activation", "small_linear_local",
+            "quoted_invocation_inactive",
+        },
+        "effort_minimum_uses_waves": {
+            "lower_bound_not_ceiling", "at_least_five_created_workers", "capacity_two",
+            "waves_preserve_total", "no_five_upper_bound_invented",
+        },
         "historical_normal_completion_does_not_self_close": {
             "historical_normal_completion", "no_self_close", "completion_candidate", "ask_close", "remain_ACTIVE"
         },

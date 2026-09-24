@@ -48,6 +48,12 @@ $relay-orchestra
 A bare invocation with a concrete bounded task defaults to lite one-shot and does not silently enable Auto:
 
 ```text
+$relay-orchestra Review the current changes and verify the important findings.
+```
+
+No effort profile or agent count is required. Relay infers a useful plan from the task and your wording. You can also specify an exact count:
+
+```text
 $relay-orchestra Run three read-only agents to review the current changes, then verify and
 synthesize their findings once.
 ```
@@ -71,7 +77,31 @@ While Auto is idle, no agents, ledger, handles, polling, resume token, or close 
 Auto is local to the current chat. It does not transfer to a new chat, delegated child task, or unrelated session, grants no new permissions, and uses no resume token. Delegated agents perform separate model work and consume usage. In Codex, prompt-matched invocation must remain enabled so a later in-scope message can honor armed Auto or continue an active Full live run; the description still forbids activation without that surviving context. When a client preserves the chat preference and its scope across compaction or ordinary responses, Auto remains enabled; Relay does not claim persistence if the client discarded it. See [OpenAI's skill invocation policy](https://learn.chatgpt.com/docs/build-skills#optional-metadata).
 
 > [!WARNING]
-> Delegated agents perform separate model work, whether concurrent or sequential, so tokens or credits can be consumed quickly. Start with the fewest agents that provide distinct value.
+> Delegated agents perform separate model work, whether concurrent or sequential, so tokens or credits can be consumed quickly. Choose effort and resource limits that suit the task; Relay weighs useful coverage, depth, speed, and coordination costs.
+
+### Steer Effort Naturally
+
+Use ordinary language, in any language, rather than selecting a profile:
+
+```text
+Give this a more thorough pass, without going all-out.
+Keep this one lean; focus on the evidence that changes the decision.
+Use maximum effort for this audit. Budget is ample; investigate independently where useful.
+Be brief in your answer, but investigate thoroughly.
+I need this quickly. Prioritize the failing path and verify the risky cases.
+For later tasks in this chat, prioritize thoroughness over speed.
+For this task only, give me a rough estimate.
+```
+
+Effort normally applies to the current task. Explicit future-use wording retains a chat default only while the client preserves that context; a one-task override does not erase it. An effort preference alone does not activate Relay or enable Auto. Preferences do not transfer implicitly to new chats or child tasks, and never grant extra permissions. “Optimal” or “your discretion” leaves normal adaptive judgment. Brief output does not mean shallow work, and “keep going” does not imply unlimited budget.
+
+“Full effort” does not request a Full live session. Required project checks remain in place at every effort level; only optional investigation and supplemental verification adapt to your preference.
+
+Maximum effort with ample budget should produce useful additional depth, coverage, verification, or parallel work when the task supports it. Large teams and capacity waves are valid; Relay has no habitual two- or three-agent cap. It also avoids decorative agents, reuses valuable context, and schedules around actual writer, build, and device bottlenecks.
+
+An exact request such as “three agents” is both a target and a cumulative ceiling. “Up to three” is only a ceiling; “at least three” is only a floor. Counts normally mean delegated workers, excluding the coordinator; Relay states the basis and honors yours. Failed or cancelled created handles still count, reuse adds none, and closing a handle or starting another wave does not reset a ceiling. Maximum effort respects numeric caps. A coordinator-selected plan can change within the same objective: Relay announces the new count, roles, and reason without asking you to approve its own estimate or selecting Full solely because the count changed. See [effort and sizing examples](skills/relay-orchestra/references/effort-and-sizing.md).
+
+See [prompt examples](examples/prompts.md) for short requests, chat defaults, one-task overrides, and numeric limits.
 
 When the host supports cross-turn background work and verified automatic wake, a successful live-session start can return this short receipt while work continues:
 
@@ -99,7 +129,7 @@ A single agent is usually a better fit for small, linear changes. Relay Orchestr
 - **Accepts changes mid-run.** In a full live session, add, revise, reprioritize, hold, or cancel work while agents are active.
 - **Uses native agents.** Relay Orchestra delegates through the host client instead of launching external agent CLIs.
 - **Keeps coordination explicit.** Ordinary delegated agents stay leaf workers. If you explicitly ask to use Relay in separate delegated tasks or chats, those tasks may become child coordinators with their own bounded scope and local lifecycle; Relay never creates another coordination level silently.
-- **Schedules to capacity.** Request any positive number of agents; Relay accounts for every slot and uses waves in live sessions when the client has fewer slots.
+- **Adapts effort and capacity.** Use natural steering or request any positive number of agents; Relay accounts for every slot and uses waves when the client has fewer slots. Its own initial plan can change while your limits remain binding.
 - **Coordinates and verifies.** It assigns ownership, tracks dependencies, audits the outcome, and asks before closing only when the selected full lifecycle requires it.
 
 ## How a Live Session Works

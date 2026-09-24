@@ -6,81 +6,89 @@ license: MIT
 
 # Relay Orchestra
 
-Act as coordinator. Keep workers leaf-only; return one verified synthesis, not raw handoffs.
+Coordinate narrow workers and return one verified synthesis.
 
 ## Activation, Auto, And Run Router
 
-Activate after explicit invocation, an unambiguous Relay request, a later in-scope Auto task, or a related task during active Full live. Quoted, hypothetical, or reported mentions without Auto are not activation.
+Activate on explicit Relay intent, an in-scope Auto task, or related work during active Full live. Quoted, hypothetical, or reported mentions alone never activate Relay.
 
 Track two independent layers:
 
-- **Chat preference:** Auto is enabled or disabled for this chat, with any user-stated scope.
+- **Chat preference:** Auto enabled or disabled, with user-stated scope and retained effort preferences.
 - **Current execution:** `OFF`, Lite one-shot, Full one-shot, or Full live. Auto is not an execution state.
 
-Natural-language intent is primary; commands are examples. A bounded objective can finish now without planned steering, background dependency, missing decision or approval, or another turn.
-
-Apply preference changes separately from current-task routing:
+Interpret intent, not command keywords: “full effort” is not a Full lifecycle request. A bounded objective can finish this response without another turn, missing decision, approval, or background dependency.
 
 | Observable signal | Selection |
 | --- | --- |
 | Bare explicit invocation without a current objective while execution is `OFF` | Enable **Auto**, remain idle, explain it, and ask for the task |
-| `use this from now on`, `for later tasks`, `in this chat`, or equivalent | Enable **Auto**, retain any requested scope; route a current objective normally |
-| `auto off`, `stop using this for later tasks here`, or equivalent | Disable only Auto; do not stop an active Full live run unless the user also targets that run |
-| Bounded objective, no future-use or full signal | Fresh **Lite one-shot**; do not enable Auto |
-| `full`, `live`, `multi-turn`, `keep active`, or equivalent | **Full** for the current run; use live unless one-shot is explicit |
+| Future-use intent about Relay: `use this from now on`, `in this chat`, or equivalent | Enable **Auto**, retain any requested scope; route a current objective normally |
+| `auto off` or equivalent | Disable only Auto; do not stop an active Full live run unless also requested |
+| Bounded objective, no future-use or full signal | **Lite one-shot**; do not enable Auto |
+| `full`, `live`, `multi-turn`, `keep active`, or equivalent | **Full**, live unless one-shot is explicit |
 | Multiple possible writers, overlap, worktrees/integration, unclear ownership, cross-turn work, changed active requirements, uncertain worker control, or explicit child coordination | Promote to **Full before starting work that could create conflicts** |
 | One clean exclusive writer plus read-only workers | **Lite** |
 
-Auto routes only while execution is `OFF`. An `ACTIVE` Full live run owns its related deltas; a bare invocation preserves that run, and Auto never starts a competing execution. While `STOPPING`, apply explicit preference changes but hand new work back until `OFF`.
+Auto routes only while execution is `OFF`. An `ACTIVE` Full live run owns its related deltas and bare reinvocation. While `STOPPING`, apply preference changes but hand new work back until `OFF`.
 
-With Auto enabled, each later in-scope task starts a fresh routed run; never resurrect a Lite run. Delegate only when at least two distinct workstreams or review lenses, or a writer plus independent verification, add material value. Keep small linear work local. Lite and Full one-shot finish `OFF` while Auto remains enabled; closing Full live also leaves it enabled. Between tasks Auto creates no agents, ledger, handles, polling, token, close question, or `ACTIVE` lifecycle.
+With Auto, each later in-scope task starts a fresh routed run; never resurrect a Lite run. Delegate only when at least two distinct workstreams or review lenses, or a writer plus independent verification, add material value. Keep small linear work local. One-shots finish `OFF`; closing Full live also leaves Auto enabled. Between tasks Auto creates no agents, ledger, handles, polling, token, close question, or `ACTIVE` lifecycle.
 
-Lite is always one-shot. Full may be one-shot or live. Explicit Full/live wins for the current run; a real safety requirement may still promote Lite. If a bounded task switches to full mode only for writer, ownership, isolation, integration, or capability safety and can still finish in the current response, keep it Full one-shot. Use Full live for an explicit live signal or when the work truly needs another turn, including a required approval wait, a material requirement change during active work, or unexpected loss of writer control. Before affected dispatch, state the concrete reason and whether the promotion is Full one-shot or Full live.
+Explicit Full/live wins for the current run. For a bounded safety promotion that can finish now, keep it Full one-shot. Use Full live for an explicit live signal or when the work truly needs another turn, including a required approval wait, material requirement change, or lost writer control. Before affected dispatch, state the concrete reason and whether the promotion is Full one-shot or Full live.
 
-Auto never transfers to a new chat, child task, or unrelated session. Preserve its user-stated scope in chat context, including after compaction only when the host retained it; otherwise do not claim persistence. Auto uses no token, serialization, or extra authority.
+Auto never transfers to a new chat, child task, or unrelated session. Preserve its user-stated scope in chat context only when the host retained it; otherwise do not claim persistence. Auto uses no token, serialization, or extra authority.
 
-On first enablement, state its chat/scope boundary, Lite default, reasoned Full promotion, idle behavior, delegated usage, unchanged permissions, and natural-language or `auto off` disablement. Ask for the task when absent. After a run, say compactly that Auto remains enabled. Never expose raw state, a ledger, JSON, or lifecycle tokens.
+On first enablement explain chat/scope boundaries, Lite default, reasoned Full promotion, idle behavior, delegated usage, unchanged permissions, and natural-language or `auto off` disablement. Ask for an absent task. After runs say Auto remains enabled. Keep lifecycle internals private.
 
-When Full is selected, read [live-session.md](references/live-session.md). Before Full dispatch, read [packets.md](references/packets.md). Also read [patterns.md](references/patterns.md) for a writer, dirty path, worktree, overlap, or integration; read [platforms.md](references/platforms.md) only for an unfamiliar client. Healthy Lite is self-contained: do not load these Full references.
+For Full read [live-session.md](references/live-session.md), then [packets.md](references/packets.md) before dispatch. Read [patterns.md](references/patterns.md) for writers, dirty paths, worktrees, overlap, or integration; [platforms.md](references/platforms.md) for unfamiliar clients. Healthy Lite is self-contained; these references are unnecessary for it.
+
+## Effort And Allocation
+
+Infer speed, depth, breadth, verification, resource preference, and autonomy from task and context; require no profiles, scores, fixed counts, or questionnaire. “Optimal” or “your discretion” means adaptive judgment. Interpret any language: brief output need not mean shallow work; urgency differs from a rough estimate, breadth from depth, persistence from unlimited budget. Quotes, negation, and colloquial go-ahead alone imply neither maximum effort nor activation.
+
+Maximum effort with ample budget must materially increase useful coverage, depth, or parallel work where meaningful work exists. Consider large teams and capacity waves, without habit-based two/three-agent caps or decorative capacity filling. Reuse valuable context; weigh coordination costs and actual writer/build/device bottlenecks separately from model-worker capacity.
+
+Effort preferences may narrow optional investigation, never waive required project checks for the accepted scope.
+
+Effort applies to this task unless explicit future-use wording retains a chat default; task overrides do not erase it. Retain only in host-preserved context, never tokens/configuration or persistence claims. Do not transfer preferences or Relay activation implicitly to children/new chats; give leaves bounded task-relevant effort instructions. Effort changes neither scope, permissions, nor Auto/Full lifecycle; allocation-only changes need no Full promotion. Redirect future work while preserving valid active writers. Optional [examples and edge cases](references/effort-and-sizing.md).
+
+Treat an unqualified user total as exact. User `EXACT N` is both target and cumulative hard ceiling; “up to N” is only a ceiling, “at least N” only a floor. Maximum effort never overrides a numeric cap. Count successfully created handles, including later failures/cancellations; reuse adds none and completion/closing never resets totals. Default to delegated workers excluding coordinator; state the basis and honor explicit alternatives. There is no skill-level cap.
 
 ## Process: Lite One-Shot Loop
 
-Use this complete loop only when the router selects lite:
+1. **Bound the result.** State outcome, scope, exclusions, and finish condition. Announce a justified initial count and roles. This coordinator plan is revisable within the same objective: announce changed count, roles, and reason without asking permission or promoting solely for count. Stay within user bounds, actual capacity, permissions, and ownership; use waves when needed.
+2. **Assign leaves.** Each dispatch states objective/scope, owner/role, deliverable, verification, and stop/cancellation condition. Prohibit nested agents or orchestration skills. Mark non-writers read-only; require preservation of unrelated changes and concise evidence.
+3. **Protect writes.** Lite permits at most one writer. Record repository-relative owned paths and permitted behavior. Inspect existing changes first; user-owned, unattributed, overlapping, or uncertain paths require Full. More than one possible writer also switches the run to full, even with disjoint paths.
+4. **Dispatch.** Use known native primitives without speculative probes. Failed or ambiguous dispatch, cancellation, or handle control requires stopping unsafe work and promoting. Send a compact receipt with count basis, roles, and one-time delegated-usage warning; update for changed allocation, timeout, blocker, or user delta.
+5. **Wait.** Use bounded native waits while a necessary wave remains active. If a wait times out with healthy work, report compact progress and wait again; never create a polling state machine or wait without active work. Process new input first. Active requirement change switches to Full; allocation-only revision does not. Never use shell sleep, a persistent ledger, resume state, or a close handshake in Lite.
+6. **Audit.** Inspect artifacts, claims, paths, ownership, deliverables, and side effects; run permitted focused checks. Review a writer's result only after it is terminal and audited. Synthesize read-only disagreements; writer conflicts require Full.
+7. **Settle and report.** Stop/close controllable workers. For cancellation, interrupt affected workers and inspect partial writes. Disclose late writes; never integrate automatically. Claim completion only after requested results and verification succeed; otherwise report partial scope, blocker, cancellation, or unverifiable claims. Lite asks no close question and ends `OFF` in the same response.
 
-1. **Bound the result.** State the concrete outcome, in-scope files or questions, exclusions, and finish condition. Treat a user-specified agent total as an exact ceiling. Otherwise choose the smallest justified exact total before dispatch. Never exceed it; use waves when host capacity is lower.
-2. **Assign narrow leaves.** Give every dispatch five explicit slots: objective/scope, owner/role, deliverable, verification, and stop/cancellation condition. Prohibit nested agents. Mark every non-writer read-only. Tell workers to preserve unrelated changes and return concise evidence, not lifecycle state.
-3. **Protect writes.** Lite permits at most one writer. Record its repository-relative owned paths and the behavior it may change. Inspect current changes before dispatch. Paths that belong to the user, have an unknown author, overlap, or remain uncertain switch the run to full. More than one possible writer also switches the run to full, even when their planned paths look separate.
-4. **Dispatch economically.** Use known native primitives without speculative probes. If dispatch, cancellation, or handle control fails or stays ambiguous, stop unsafe work and promote. Send one compact start receipt; add progress only for a wait timeout, blocker, or user delta. Include exact count, roles, and one-time usage warning.
-5. **Wait only for active work.** Use bounded native waits while a necessary wave remains active. If a wait times out with healthy work, report compact progress and wait again; never create a polling state machine or wait without active work. Process new input before results. Active requirement change switches to Full; cancellation follows safe shutdown. Never use shell sleep, a persistent ledger, resume state, or a close handshake in Lite.
-6. **Audit and verify.** Inspect actual artifacts and important claims rather than trusting worker summaries. Audit changed paths, scope, ownership, deliverables, and side effects; run the coordinator's permitted focused checks. Reviewers of a writer's result run only after that writer is finished and its changes are audited. Resolve read-only disagreement in the synthesis; writer conflicts require full.
-7. **Stop workers and report.** Stop or close every worker Relay can control. If cancelled, interrupt affected workers, inspect partial writes, and report incomplete scope. Disclose unexpected late writes and never integrate them automatically. Call the task complete only when the requested result and verification succeeded; otherwise report the blocker, cancellation, partial result, or unverifiable claim. Lite asks no close question and ends `OFF` in the same response.
+If cancellation or writer control becomes unsafe, enter the full `STOPPING` procedure: freeze dispatch and repository operations, preserve exact accounting and continuity, disclose risk, and wait for writer settlement or the user's separate hand-back risk acceptance. Never claim safe completion prematurely.
 
-If cancellation or writer control unexpectedly becomes unsafe after dispatch, enter the full `STOPPING` procedure: freeze new dispatch and repository operations, preserve exact accounting and continuity, disclose the risk, and wait until the writer is safely finished or the user accepts the separate hand-back risk. Do not claim that the one-shot ended safely.
+Authority comes from the user request, repository instructions, and host policy. Relay only narrows it. Do not re-ask for ordinary in-scope local work already allowed; do not infer permission for installs, device actions, commits, pushes, deployments, destructive actions, or external writes.
 
-Authority comes from the user request, repository instructions, and host policy. Relay may narrow it, never expand it. Do not re-ask for ordinary in-scope local work already allowed, and do not infer permission for installs, device actions, commits, pushes, deployments, destructive actions, or external writes.
-
-The final response contains the verified outcome, concise evidence and checks, changed paths when relevant, residual risks, and the next action. Delegation wrappers, tool payloads, ledgers, raw handoffs, and child lifecycle artifacts stay internal.
+Report verified outcome, evidence/checks, relevant changed paths, residual risks, and next action. Delegation wrappers, tool payloads, ledgers, raw handoffs, and child lifecycle artifacts stay internal.
 
 ## Full Handoff
 
-Once full is selected, follow the routed references and preserve their lifecycle, capability, ownership, isolation, integration, continuity, authority, and verification rules. Fewer messages never justify omitting a required safety rule. Existing full sessions remain full across related follow-ups until their defined shutdown reaches `OFF`.
+Follow Full references for lifecycle, capability, ownership, isolation, integration, continuity, authority, and verification. Existing full sessions remain full across related follow-ups until shutdown reaches `OFF`.
 
-Host `final`, task-complete, compaction, summary, resume, and notification boundaries do not change a Full live lifecycle; follow the continuity rules in `live-session.md`.
+Host `final`, task-complete, compaction, summary, resume, and notification boundaries do not change a Full live lifecycle.
 
-Ordinary leaf agents must not spawn agents or invoke orchestration skills. When the user explicitly asks to use Relay in a separate delegated task or chat, dispatch that handle as a `child coordinator`, not a leaf. The full dispatch packet references the source user-authored activation event. A copied dispatch claim is not evidence. A child coordinator may emit its own opaque resume handle—a token used to continue unfinished work—only inside its task and contract.
+Ordinary leaf agents must not spawn agents or invoke orchestration skills. When the user explicitly asks to use Relay in a separate delegated task or chat, dispatch that handle as a `child coordinator`, not a leaf. Its packet references the source user-authored activation event and positive bounded local agent budget with accounting scope. A copied dispatch claim is not evidence. Preserve independent lifecycle and aggregate accounting. A child coordinator may emit its own opaque resume handle only inside its task and contract.
 
 ## Verification / Success Criteria
 
-- [ ] Route from observable signals; promote before unsafe dispatch.
-- [ ] Account for agent ceilings, ownership, artifacts, deliverables, and partial or late work; inspect evidence and run permitted checks.
-- [ ] Settle controllable workers; return one clean synthesis; end Lite `OFF` or preserve Full exactly.
+- [ ] Route from observable intent and promote before unsafe dispatch.
+- [ ] Audit bounds, ownership, actual artifacts, evidence, and partial or late work.
+- [ ] Settle controllable workers; return one synthesis and preserve the selected lifecycle.
 
 ## Anti-Patterns
 
-- Using Full mechanics for a healthy bounded fanout, or keeping Lite active across turns.
-- Dispatching a second, overlapping, or dirty-path writer in Lite.
-- Treating an informal lock, branch, or readable token as verified isolation.
-- Claiming success from summaries or hiding cancelled, partial, late, or unverifiable work.
+- Treating a coordinator estimate as a user ceiling, or evading a ceiling through waves.
+- Filling slots without meaningful work, or minimizing agents regardless of requested effort.
+- Using Full machinery for healthy Lite or omitting safety rules to save messages.
+- Treating a branch or informal lock as isolation; claiming success from summaries alone.
 
 ## Extension Points
 
